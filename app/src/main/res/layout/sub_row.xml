@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<LinearLayout xmlns:tools="http://schemas.android.com/tools"
+    style="@style/digit_row"
+    tools:showIn="@layout/activity_main">
+
+    <TextView
+        tools:text="1"
+        style="@style/digit_style" />
+
+    <TextView
+        tools:text="2"
+        style="@style/digit_style" />
+
+    <TextView
+        tools:text="3"
+        style="@style/digit_style" />
+</LinearLayout>
+                

@@ -1,0 +1,436 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_gravity="center"
+    android:orientation="vertical"
+    android:background="#ff7"
+    tools:context=".MainActivity">
+
+    <LinearLayout
+        android:padding="1dp"
+        android:background="@drawable/group_border"
+        style="@style/digit_row"
+        android:orientation="vertical">
+        <LinearLayout
+            style="@style/digit_row">
+            <LinearLayout style="@style/group">
+
+                <include layout="@layout/sub_row" />
+
+                <LinearLayout style="@style/digit_row">
+                    <TextView
+                        tools:text="4"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="5"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="6"
+                        style="@style/digit_style"
+                        />
+                </LinearLayout>
+                <LinearLayout style="@style/digit_row">
+                    <TextView
+                        tools:text="7"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="8"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="9"
+                        style="@style/digit_style"
+                        />
+                </LinearLayout>
+            </LinearLayout>
+            <LinearLayout style="@style/group">
+                <LinearLayout style="@style/digit_row">
+                    <TextView
+                        tools:text="1"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="2"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="3"
+                        style="@style/digit_style"
+                        />
+                </LinearLayout>
+                <LinearLayout style="@style/digit_row">
+                    <TextView
+                        tools:text="4"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="5"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="6"
+                        style="@style/digit_style"
+                        />
+                </LinearLayout>
+                <LinearLayout style="@style/digit_row">
+                    <TextView
+                        tools:text="7"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="8"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="9"
+                        style="@style/digit_style"
+                        />
+                </LinearLayout>
+            </LinearLayout>
+            <LinearLayout style="@style/group">
+                <LinearLayout style="@style/digit_row">
+                    <TextView
+                        tools:text="1"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="2"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="3"
+                        style="@style/digit_style"
+                        />
+                </LinearLayout>
+                <LinearLayout style="@style/digit_row">
+                    <TextView
+                        tools:text="4"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="5"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="6"
+                        style="@style/digit_style"
+                        />
+                </LinearLayout>
+                <LinearLayout style="@style/digit_row">
+                    <TextView
+                        tools:text="7"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="8"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="9"
+                        style="@style/digit_style"
+                        />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+        <LinearLayout
+            style="@style/digit_row">
+            <LinearLayout style="@style/group">
+                <LinearLayout style="@style/digit_row">
+                    <TextView
+                        tools:text="1"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="2"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="3"
+                        style="@style/digit_style"
+                        />
+                </LinearLayout>
+                <LinearLayout style="@style/digit_row">
+                    <TextView
+                        tools:text="4"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="5"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="6"
+                        style="@style/digit_style"
+                        />
+                </LinearLayout>
+                <LinearLayout style="@style/digit_row">
+                    <TextView
+                        tools:text="7"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="8"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="9"
+                        style="@style/digit_style"
+                        />
+                </LinearLayout>
+            </LinearLayout>
+            <LinearLayout style="@style/group">
+                <LinearLayout style="@style/digit_row">
+                    <TextView
+                        tools:text="1"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="2"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="3"
+                        style="@style/digit_style"
+                        />
+                </LinearLayout>
+                <LinearLayout style="@style/digit_row">
+                    <TextView
+                        tools:text="4"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="5"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="6"
+                        style="@style/digit_style"
+                        />
+                </LinearLayout>
+                <LinearLayout style="@style/digit_row">
+                    <TextView
+                        tools:text="7"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="8"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="9"
+                        style="@style/digit_style"
+                        />
+                </LinearLayout>
+            </LinearLayout>
+            <LinearLayout style="@style/group">
+                <LinearLayout style="@style/digit_row">
+                    <TextView
+                        tools:text="1"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="2"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="3"
+                        style="@style/digit_style"
+                        />
+                </LinearLayout>
+                <LinearLayout style="@style/digit_row">
+                    <TextView
+                        tools:text="4"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="5"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="6"
+                        style="@style/digit_style"
+                        />
+                </LinearLayout>
+                <LinearLayout style="@style/digit_row">
+                    <TextView
+                        tools:text="7"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="8"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="9"
+                        style="@style/digit_style"
+                        />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+        <LinearLayout
+            style="@style/digit_row">
+            <LinearLayout style="@style/group">
+                <LinearLayout style="@style/digit_row">
+                    <TextView
+                        tools:text="1"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="2"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="3"
+                        style="@style/digit_style"
+                        />
+                </LinearLayout>
+                <LinearLayout style="@style/digit_row">
+                    <TextView
+                        tools:text="4"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="5"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="6"
+                        style="@style/digit_style"
+                        />
+                </LinearLayout>
+                <LinearLayout style="@style/digit_row">
+                    <TextView
+                        tools:text="7"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="8"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="9"
+                        style="@style/digit_style"
+                        />
+                </LinearLayout>
+            </LinearLayout>
+            <LinearLayout style="@style/group">
+                <LinearLayout style="@style/digit_row">
+                    <TextView
+                        tools:text="1"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="2"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="3"
+                        style="@style/digit_style"
+                        />
+                </LinearLayout>
+                <LinearLayout style="@style/digit_row">
+                    <TextView
+                        tools:text="4"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="5"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="6"
+                        style="@style/digit_style"
+                        />
+                </LinearLayout>
+                <LinearLayout style="@style/digit_row">
+                    <TextView
+                        tools:text="7"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="8"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="9"
+                        style="@style/digit_style"
+                        />
+                </LinearLayout>
+            </LinearLayout>
+            <LinearLayout style="@style/group">
+                <LinearLayout style="@style/digit_row">
+                    <TextView
+                        tools:text="1"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="2"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="3"
+                        style="@style/digit_style"
+                        />
+                </LinearLayout>
+                <LinearLayout style="@style/digit_row">
+                    <TextView
+                        tools:text="4"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="5"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="6"
+                        style="@style/digit_style"
+                        />
+                </LinearLayout>
+                <LinearLayout style="@style/digit_row">
+                    <TextView
+                        tools:text="7"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="8"
+                        style="@style/digit_style"
+                        />
+                    <TextView
+                        tools:text="9"
+                        style="@style/digit_style"
+                        />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+
+    <GridLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingTop="15dp"
+        android:orientation="horizontal"
+        >
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:drawableStart="@android:drawable/ic_menu_camera"
+            android:text="@string/capture"
+            android:textAllCaps="false"
+            />
+        <androidx.appcompat.widget.AppCompatButton
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end"
+            android:text="@string/solve"
+            android:textAllCaps="false"
+            />
+    </GridLayout>
+
+</LinearLayout>
