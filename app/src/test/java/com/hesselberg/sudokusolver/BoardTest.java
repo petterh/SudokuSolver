@@ -1,5 +1,7 @@
 package com.hesselberg.sudokusolver;
 
+import android.util.DisplayMetrics;
+
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -58,10 +60,24 @@ public class BoardTest {
         assertEquals(26, Board.convertToTextViewIndex(26));
         assertEquals(54, Board.convertToTextViewIndex(54));
         assertEquals(57, Board.convertToTextViewIndex(63));
-        assertEquals(4, Board.convertToTextViewIndex(10));
-        assertEquals(4, Board.convertToTextViewIndex(10));
-        assertEquals(4, Board.convertToTextViewIndex(10));
         assertEquals(81, Board.convertToTextViewIndex(81));
+    }
+
+    @Test
+    public void convertToStringIndex() {
+        assertEquals(0, Board.convertToStringIndex(0));
+        assertEquals(6, Board.convertToStringIndex(18));
+        assertEquals(26, Board.convertToStringIndex(26));
+        assertEquals(54, Board.convertToStringIndex(54));
+        assertEquals(63, Board.convertToStringIndex(57));
+        assertEquals(81, Board.convertToStringIndex(81));
+    }
+
+    @Test
+    public void verifyConversionSymmetry() {
+        for (int i = 0; i < Board.DIM * Board.DIM; i++) {
+            assertEquals(i, Board.convertToTextViewIndex(Board.convertToTextViewIndex(i)));
+        }
     }
 
     @Test

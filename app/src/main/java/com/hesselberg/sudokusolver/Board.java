@@ -2,6 +2,9 @@ package com.hesselberg.sudokusolver;
 
 import androidx.annotation.NonNull;
 
+/**
+ * TODO: Dimensions need generalizing to 16x16 and 6x6 with 2x3 unsquare groups.
+ */
 public class Board {
 
     private static final int SUB = 3;
@@ -65,6 +68,20 @@ public class Board {
         int group = group_y * SUB + group_x;
         int cell = (y % SUB) * SUB + x % SUB;
         return group * DIM + cell;
+    }
+
+    /**
+     * This turns out to be exactly the same as {@link #convertToTextViewIndex(int)}.
+     * I'm not yet clear on where this symmetry comes from.
+     */
+    public static int convertToStringIndex(int i) {
+        int group = i / DIM;
+        int cell = i % DIM;
+        int group_x = group % SUB;
+        int group_y = group / SUB;
+        int y = group_y * SUB + cell / SUB;
+        int x = group_x * SUB + cell % SUB;
+        return y * DIM + x;
     }
 
     public boolean solve() {
