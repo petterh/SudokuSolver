@@ -2,6 +2,7 @@ package com.hesselberg.sudokusolver;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import android.graphics.Typeface;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
@@ -50,12 +51,29 @@ public class MainActivity extends AppCompatActivity {
         List<TextView> textViews = getTextViews(view);
         int i = 0;
         for (TextView textView : textViews) {
-            try {
+            char[] ch = new char[1];
+            ch[0] = Board.TEST_BOARD.charAt(i++);
+            textView.setText(ch, 0, 1);
+            if (ch[0] != ' ') {
+                Typeface typeface = textView.getTypeface();
+                textView.setTypeface(null, Typeface.BOLD);
+                textView.setTextColor(0xff000000);
+            }
+        }
+    }
+
+    @OnClick(R.id.btn_solve)
+    void solveClicked() {
+        LinearLayout view = findViewById(R.id.board);
+        List<TextView> textViews = getTextViews(view);
+        int i = 0;
+        for (TextView textView : textViews) {
+            CharSequence text = textView.getText();
+            if (text.length() != 0 && !text.equals(" ")) {
                 char[] ch = new char[1];
-                ch[0] = Board.TEST_BOARD.charAt(i++);
+                int value = i++ % 9 + 1;
+                ch[0] = Integer.toString(value).charAt(0);
                 textView.setText(ch, 0, 1);
-            } catch (Throwable t) {
-                Log.e(TAG, "captureClicked: ", t);
             }
         }
     }
