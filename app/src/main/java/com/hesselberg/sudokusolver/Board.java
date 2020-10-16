@@ -5,7 +5,7 @@ import androidx.annotation.NonNull;
 public class Board {
 
     private static final int SUB = 3;
-    private static final int DIM = SUB * SUB;
+    static final int DIM = SUB * SUB;
 
     static final String TEST_BOARD =
             "       1 " +
@@ -55,6 +55,16 @@ public class Board {
             int sub = (row % SUB) * SUB + (column % SUB);
             groups[group][sub] = fields[i];
         }
+    }
+
+    public static int convertToTextViewIndex(int i) {
+        int x = i % DIM;
+        int y = i / DIM;
+        int group_x = x / SUB;
+        int group_y = y / SUB;
+        int group = group_y * SUB + group_x;
+        int cell = (y % SUB) * SUB + x % SUB;
+        return group * DIM + cell;
     }
 
     public boolean solve() {

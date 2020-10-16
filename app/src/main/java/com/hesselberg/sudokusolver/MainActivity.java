@@ -46,15 +46,14 @@ public class MainActivity extends AppCompatActivity {
 
     @OnClick(R.id.btn_capture)
     void captureClicked() {
-        LinearLayout view = findViewById(R.id.board);
-        List<TextView> textViews = getTextViews(view);
-        int i = 0;
-        for (TextView textView : textViews) {
+        List<TextView> textViews = getTextViews(this.<LinearLayout>findViewById(R.id.board));
+        for (int i = 0; i < Board.DIM * Board.DIM; i++) {
+            int textViewIndex = Board.convertToTextViewIndex(i);
+            TextView textView = textViews.get(textViewIndex);
             char[] ch = new char[1];
-            ch[0] = Board.TEST_BOARD.charAt(i++);
+            ch[0] = Board.TEST_BOARD.charAt(i);
             textView.setText(ch, 0, 1);
             if (ch[0] != ' ') {
-                Typeface typeface = textView.getTypeface();
                 textView.setTypeface(null, Typeface.BOLD);
                 textView.setTextColor(0xff000000);
             }
@@ -63,15 +62,14 @@ public class MainActivity extends AppCompatActivity {
 
     @OnClick(R.id.btn_solve)
     void solveClicked() {
-        LinearLayout view = findViewById(R.id.board);
-        List<TextView> textViews = getTextViews(view);
-        int i = 0;
-        for (TextView textView : textViews) {
+        List<TextView> textViews = getTextViews(this.<LinearLayout>findViewById(R.id.board));
+        for (int i = 0; i < Board.DIM * Board.DIM; i++) {
+            int textViewIndex = Board.convertToTextViewIndex(i);
+            TextView textView = textViews.get(textViewIndex);
             CharSequence text = textView.getText();
             if (text.length() != 0 && text.charAt(0) == ' ') {
                 char[] ch = new char[1];
-                int value = i++ % 9 + 1;
-                ch[0] = Integer.toString(value).charAt(0);
+                ch[0] = Integer.toString(i % 9 + 1).charAt(0);
                 textView.setText(ch, 0, 1);
             } else {
                 Log.d(TAG, "solveClicked: ");

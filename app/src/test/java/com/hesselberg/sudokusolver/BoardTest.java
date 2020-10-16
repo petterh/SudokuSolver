@@ -52,6 +52,19 @@ public class BoardTest {
     }
 
     @Test
+    public void convertToTextViewIndex() {
+        assertEquals(0, Board.convertToTextViewIndex(0));
+        assertEquals(18, Board.convertToTextViewIndex(6));
+        assertEquals(26, Board.convertToTextViewIndex(26));
+        assertEquals(54, Board.convertToTextViewIndex(54));
+        assertEquals(57, Board.convertToTextViewIndex(63));
+        assertEquals(4, Board.convertToTextViewIndex(10));
+        assertEquals(4, Board.convertToTextViewIndex(10));
+        assertEquals(4, Board.convertToTextViewIndex(10));
+        assertEquals(81, Board.convertToTextViewIndex(81));
+    }
+
+    @Test
     public void constructor() {
         Board board = new Board();
     }
