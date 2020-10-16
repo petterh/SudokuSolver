@@ -4,12 +4,15 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
-    android:layout_gravity="center"
+    android:layout_gravity="center_horizontal"
+    android:gravity="center"
+    android:paddingTop="30dp"
     android:orientation="vertical"
-    android:background="#ff7"
+    android:background="#fff"
     tools:context=".MainActivity">
 
     <LinearLayout
+        android:id="@+id/board"
         android:padding="1dp"
         android:background="@drawable/group_border"
         style="@style/digit_row"
@@ -418,6 +421,7 @@
         >
 
         <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/btn_capture"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:drawableStart="@android:drawable/ic_menu_camera"
@@ -425,9 +429,11 @@
             android:textAllCaps="false"
             />
         <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/btn_solve"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="end"
+            android:drawableStart="@android:drawable/ic_media_play"
             android:text="@string/solve"
             android:textAllCaps="false"
             />
