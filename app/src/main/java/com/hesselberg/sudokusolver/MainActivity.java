@@ -1,7 +1,5 @@
 package com.hesselberg.sudokusolver;
 
-import androidx.appcompat.app.AppCompatActivity;
-
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.util.Log;
@@ -9,7 +7,8 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
+
+import androidx.appcompat.app.AppCompatActivity;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -30,19 +29,19 @@ public class MainActivity extends AppCompatActivity {
         Unbinder unbinder = ButterKnife.bind(this);
     }
 
-    public static List<TextView> getTextViews(ViewGroup root) {
-        final ArrayList<TextView> result = new ArrayList<>();
+    public List<TextView> getTextViews(ViewGroup root) {
+        List<TextView> textViews = new ArrayList<>();
         int childCount = root.getChildCount();
         for (int i = 0; i < childCount; i++) {
             final View child = root.getChildAt(i);
             if (child instanceof ViewGroup) {
-                result.addAll(getTextViews((ViewGroup) child));
+                textViews.addAll(getTextViews((ViewGroup) child));
             } else if (child instanceof TextView) {
-                result.add((TextView) child);
+                textViews.add((TextView) child);
             }
         }
 
-        return result;
+        return textViews;
     }
 
     @OnClick(R.id.btn_capture)
@@ -69,11 +68,13 @@ public class MainActivity extends AppCompatActivity {
         int i = 0;
         for (TextView textView : textViews) {
             CharSequence text = textView.getText();
-            if (text.length() != 0 && !text.equals(" ")) {
+            if (text.length() != 0 && text.charAt(0) == ' ') {
                 char[] ch = new char[1];
                 int value = i++ % 9 + 1;
                 ch[0] = Integer.toString(value).charAt(0);
                 textView.setText(ch, 0, 1);
+            } else {
+                Log.d(TAG, "solveClicked: ");
             }
         }
     }
