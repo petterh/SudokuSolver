@@ -1,6 +1,9 @@
 package com.hesselberg.sudokusolver;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import java.util.List;
 
 /**
  * TODO: Dimensions need generalizing to 16x16 and 6x6 with 2x3 unsquare groups.
@@ -35,6 +38,21 @@ public class Board {
         public void setValue(char value) {
             this.value = value;
         }
+
+        @Override
+        public int hashCode() {
+            return value;
+        }
+
+        @Override
+        public boolean equals(@Nullable Object obj) {
+            if (obj == null || obj.getClass() != Field.class) {
+                return false;
+            }
+
+            Field other = (Field) obj;
+            return value == other.value;
+        }
     }
 
     private final Field[] fields = new Field[DIM * DIM];
@@ -48,8 +66,8 @@ public class Board {
     }
 
     public Board(@NonNull String board) {
-        for (int i = 0; i < DIM * DIM; i++) {
-            fields[i] = new Field(TEST_BOARD.charAt(i));
+        for (int i = 0; i < board.length(); i++) {
+            fields[i] = new Field(board.charAt(i));
             int row  = i / DIM;
             int column  = i % DIM;
             rows[row][column] = fields[i];
@@ -58,6 +76,84 @@ public class Board {
             int sub = (row % SUB) * SUB + (column % SUB);
             groups[group][sub] = fields[i];
         }
+    }
+
+    boolean isAcceptable() {
+        return isAcceptable(rows) && isAcceptable(columns) && isAcceptable(groups);
+    }
+
+    private boolean isAcceptable(Field[][] fields) {
+        for (int i = 0; i < DIM; i++) {
+            if (!isAcceptable(fields[i])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private boolean isAcceptable(Field[] fields) {
+        int mask = 0;
+        for (int i = 0; i < DIM; i++) {
+            Field field = fields[i];
+            if (field != null) {
+                char value = field.getValue();
+                if (Character.isDigit(value)) {
+                    int d = 1 << (value - '0');
+                    if ((mask & d) != 0) {
+                        return false;
+                    }
+
+                    mask |= d;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    public boolean solve(List<String> solutions) {
+        if (!isAcceptable()) {
+            return false;
+        }
+
+        int i = findNextEmptyCell();
+        if (i < 0) {
+            solutions.add(toString());
+            return true;
+        }
+
+        for (int j = 0; j < DIM; j++) {
+            fields[i].setValue((char) ('1' + j));
+            if (solve(solutions)) {
+                return true;
+            }
+        }
+
+        fields[i].setValue(' ');
+
+        return false;
+    }
+
+    @NonNull
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+        for (Field field : fields) {
+            sb.append(field.getValue());
+        }
+
+        return sb.toString();
+    }
+
+    private int findNextEmptyCell() {
+        for (int i = 0; i < fields.length; i++) {
+            if (!Character.isDigit(fields[i].getValue())){
+                return i;
+            }
+        }
+
+        return -1;
     }
 
     public static int convertToTextViewIndex(int i) {
@@ -82,9 +178,5 @@ public class Board {
         int y = group_y * SUB + cell / SUB;
         int x = group_x * SUB + cell % SUB;
         return y * DIM + x;
-    }
-
-    public boolean solve() {
-        return false;
     }
 }

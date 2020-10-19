@@ -62,18 +62,16 @@ public class MainActivity extends AppCompatActivity {
 
     @OnClick(R.id.btn_solve)
     void solveClicked() {
+        List<String> solutions = new ArrayList<>(1);
+        new Board(Board.TEST_BOARD).solve(solutions);
+        String solution = solutions.get(0);
         List<TextView> textViews = getTextViews(this.<LinearLayout>findViewById(R.id.board));
         for (int i = 0; i < Board.DIM * Board.DIM; i++) {
             int textViewIndex = Board.convertToTextViewIndex(i);
             TextView textView = textViews.get(textViewIndex);
-            CharSequence text = textView.getText();
-            if (text.length() != 0 && text.charAt(0) == ' ') {
-                char[] ch = new char[1];
-                ch[0] = Integer.toString(i % 9 + 1).charAt(0);
-                textView.setText(ch, 0, 1);
-            } else {
-                Log.d(TAG, "solveClicked: ");
-            }
+            char[] ch = new char[1];
+            ch[0] = solution.charAt(i);
+            textView.setText(ch, 0, 1);
         }
     }
 }

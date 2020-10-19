@@ -1,10 +1,11 @@
 package com.hesselberg.sudokusolver;
 
-import android.util.DisplayMetrics;
-
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.Assert.*;
 
@@ -32,6 +33,50 @@ public class BoardTest {
             "295738146" +
             "486291735";
 
+    private static final String ERROR1 =
+            "679324518" +
+            "823159674" +
+            "154867392" +
+            "761982453" +
+            "938415261" +
+            "542673981" +
+            "317546829" +
+            "295738146" +
+            "486291735";
+
+    private static final String ERROR2 =
+            "       11" +
+            "8        " +
+            "    67  2" +
+            " 6  82  3" +
+            "9  4 5   " +
+            "     3 81" +
+            "3  5     " +
+            "  5   1 6" +
+            "4  2  73 ";
+
+    private static final String ERROR3 =
+            "       1 " +
+            "8        " +
+            " 8  67  2" +
+            " 6  82  3" +
+            "9  4 5   " +
+            "     3 81" +
+            "3  5     " +
+            "  5   1 6" +
+            "4  2  73 ";
+
+    private static final String ERROR4 =
+            "       1 " +
+            "8        " +
+            "    67  2" +
+            " 6  82  3" +
+            "9  4 5   " +
+            "     3 81" +
+            "3  5     " +
+            "  5    16" +
+            "4  2  73 ";
+
     @Before
     public void setUp() throws Exception {
     }
@@ -51,6 +96,17 @@ public class BoardTest {
                 assertEquals(solution, test);
             }
         }
+    }
+
+    @Test
+    public void solve() {
+        Board board = new Board((TEST_BOARD));
+        List<String> solutions = new ArrayList<>();
+        long start = System.currentTimeMillis();
+        assertTrue(board.solve(solutions));
+        System.out.println(System.currentTimeMillis() - start);
+        assertEquals(1, solutions.size());
+        assertEquals(SOLUTION, solutions.get(0));
     }
 
     @Test
@@ -78,6 +134,23 @@ public class BoardTest {
         for (int i = 0; i < Board.DIM * Board.DIM; i++) {
             assertEquals(i, Board.convertToTextViewIndex(Board.convertToTextViewIndex(i)));
         }
+    }
+
+    @Test
+    public void testIsAcceptable() {
+        assertTrue(new Board("123").isAcceptable());
+        assertFalse(new Board("11").isAcceptable());
+        assertTrue(new Board(SOLUTION).isAcceptable());
+        assertFalse(new Board(ERROR1).isAcceptable());
+        assertFalse(new Board(ERROR2).isAcceptable());
+        assertFalse(new Board(ERROR3).isAcceptable());
+        assertFalse(new Board(ERROR4).isAcceptable());
+    }
+
+    @Test
+    public void testToString() {
+        assertEquals(TEST_BOARD, new Board(TEST_BOARD).toString());
+        assertEquals(SOLUTION, new Board(SOLUTION).toString());
     }
 
     @Test
