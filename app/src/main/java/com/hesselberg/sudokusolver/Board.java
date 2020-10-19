@@ -91,7 +91,7 @@ public class Board {
             Field field = fields[i];
             if (field != null) {
                 char value = field.getValue();
-                if (Character.isDigit(value)) {
+                if (value > '0') {
                     int d = 1 << (value - '0');
                     if ((mask & d) != 0) {
                         return false;
