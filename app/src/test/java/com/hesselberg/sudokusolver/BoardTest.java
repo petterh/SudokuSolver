@@ -138,13 +138,13 @@ public class BoardTest {
 
     @Test
     public void testIsAcceptable() {
-        assertTrue(new Board("123").isAcceptable());
-        assertFalse(new Board("11").isAcceptable());
-        assertTrue(new Board(SOLUTION).isAcceptable());
-        assertFalse(new Board(ERROR1).isAcceptable());
-        assertFalse(new Board(ERROR2).isAcceptable());
-        assertFalse(new Board(ERROR3).isAcceptable());
-        assertFalse(new Board(ERROR4).isAcceptable());
+        assertTrue(new Board("123").isAcceptable(0));
+        assertFalse(new Board("11").isAcceptable(0));
+        assertTrue(new Board(SOLUTION).isAcceptable(0));
+        assertFalse(new Board(ERROR1).isAcceptable(8));
+        assertFalse(new Board(ERROR2).isAcceptable(0));
+        assertFalse(new Board(ERROR3).isAcceptable(0));
+        assertFalse(new Board(ERROR4).isAcceptable(7));
     }
 
     @Test

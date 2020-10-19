@@ -78,18 +78,11 @@ public class Board {
         }
     }
 
-    boolean isAcceptable() {
-        return isAcceptable(rows) && isAcceptable(columns) && isAcceptable(groups);
-    }
-
-    private boolean isAcceptable(Field[][] fields) {
-        for (int i = 0; i < DIM; i++) {
-            if (!isAcceptable(fields[i])) {
-                return false;
-            }
-        }
-
-        return true;
+    boolean isAcceptable(int i) {
+        int row  = i / DIM;
+        int column  = i % DIM;
+        int group = (row / SUB) * SUB + (column / SUB);
+        return isAcceptable(rows[row]) && isAcceptable(columns[column]) && isAcceptable(groups[group]);
     }
 
     private boolean isAcceptable(Field[] fields) {
@@ -113,11 +106,11 @@ public class Board {
     }
 
     public boolean solve(List<String> solutions) {
-        if (!isAcceptable()) {
-            return false;
-        }
+        return solve(solutions, 0);
+    }
 
-        int i = findNextEmptyCell();
+    public boolean solve(List<String> solutions, int start) {
+        int i = findEmptyCell(start);
         if (i < 0) {
             solutions.add(toString());
             return true;
@@ -125,7 +118,7 @@ public class Board {
 
         for (int j = 0; j < DIM; j++) {
             fields[i].setValue((char) ('1' + j));
-            if (solve(solutions)) {
+            if (isAcceptable(i) && solve(solutions, i)) {
                 return true;
             }
         }
@@ -146,9 +139,9 @@ public class Board {
         return sb.toString();
     }
 
-    private int findNextEmptyCell() {
-        for (int i = 0; i < fields.length; i++) {
-            if (!Character.isDigit(fields[i].getValue())){
+    private int findEmptyCell(int start) {
+        for (int i = start; i < fields.length; i++) {
+            if (fields[i].getValue() <= '0') {
                 return i;
             }
         }
