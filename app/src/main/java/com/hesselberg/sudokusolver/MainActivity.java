@@ -2,7 +2,6 @@ package com.hesselberg.sudokusolver;
 
 import android.graphics.Typeface;
 import android.os.Bundle;
-import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
@@ -19,14 +18,29 @@ import butterknife.Unbinder;
 
 public class MainActivity extends AppCompatActivity {
 
-    private static final String TAG = "MainActivity";
-    private Board board = new Board();
+    private static final String TEST_BOARD =
+            "       1 " +
+            "8        " +
+            "    67  2" +
+            " 6  82  3" +
+            "9  4 5   " +
+            "     3 81" +
+            "3  5     " +
+            "  5   1 6" +
+            "4  2  73 ";
+    private Unbinder unbinder;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        Unbinder unbinder = ButterKnife.bind(this);
+        unbinder = ButterKnife.bind(this);
+    }
+
+    @Override
+    protected void onDestroy() {
+        unbinder.unbind();
+        super.onDestroy();
     }
 
     public List<TextView> getTextViews(ViewGroup root) {
@@ -51,7 +65,7 @@ public class MainActivity extends AppCompatActivity {
             int textViewIndex = Board.convertToTextViewIndex(i);
             TextView textView = textViews.get(textViewIndex);
             char[] ch = new char[1];
-            ch[0] = Board.TEST_BOARD.charAt(i);
+            ch[0] = TEST_BOARD.charAt(i);
             textView.setText(ch, 0, 1);
             if (ch[0] != ' ') {
                 textView.setTypeface(null, Typeface.BOLD);
@@ -63,7 +77,7 @@ public class MainActivity extends AppCompatActivity {
     @OnClick(R.id.btn_solve)
     void solveClicked() {
         List<String> solutions = new ArrayList<>(1);
-        new Board(Board.TEST_BOARD).solve(solutions);
+        new Board(TEST_BOARD).solve(solutions);
         String solution = solutions.get(0);
         List<TextView> textViews = getTextViews(this.<LinearLayout>findViewById(R.id.board));
         for (int i = 0; i < Board.DIM * Board.DIM; i++) {

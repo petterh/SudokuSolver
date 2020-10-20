@@ -1,7 +1,7 @@
 package com.hesselberg.sudokusolver;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import java.util.List;
 
@@ -12,17 +12,7 @@ public class Board {
 
     private static final int SUB = 3;
     static final int DIM = SUB * SUB;
-
-    static final String TEST_BOARD =
-            "       1 " +
-            "8        " +
-            "    67  2" +
-            " 6  82  3" +
-            "9  4 5   " +
-            "     3 81" +
-            "3  5     " +
-            "  5   1 6" +
-            "4  2  73 ";
+    public static final int ALL_CELLS_TAKEN = -1;
 
     private static class Field {
         private char value;
@@ -38,21 +28,6 @@ public class Board {
         public void setValue(char value) {
             this.value = value;
         }
-
-        @Override
-        public int hashCode() {
-            return value;
-        }
-
-        @Override
-        public boolean equals(@Nullable Object obj) {
-            if (obj == null || obj.getClass() != Field.class) {
-                return false;
-            }
-
-            Field other = (Field) obj;
-            return value == other.value;
-        }
     }
 
     private final Field[] fields = new Field[DIM * DIM];
@@ -60,10 +35,6 @@ public class Board {
     private final Field[][] rows = new Field[DIM][DIM];
     private final Field[][] columns = new Field[DIM][DIM];
     private final Field[][] groups = new Field[DIM][DIM];
-
-    Board() {
-        this(TEST_BOARD);
-    }
 
     public Board(@NonNull String board) {
         for (int i = 0; i < board.length(); i++) {
@@ -78,6 +49,17 @@ public class Board {
         }
     }
 
+    private boolean isAcceptable() {
+        for (int i = 0; i < DIM; i++) {
+            if (!isAcceptable(i)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    @VisibleForTesting
     boolean isAcceptable(int i) {
         int row  = i / DIM;
         int column  = i % DIM;
@@ -109,11 +91,15 @@ public class Board {
         return solve(solutions, 0);
     }
 
-    public boolean solve(List<String> solutions, int start) {
+    private boolean solve(List<String> solutions, int start) {
         int i = findEmptyCell(start);
-        if (i < 0) {
-            solutions.add(toString());
-            return true;
+        if (i == ALL_CELLS_TAKEN) {
+            boolean acceptable = isAcceptable();
+            if (acceptable) {
+                solutions.add(toString());
+            }
+
+            return acceptable;
         }
 
         for (int j = 0; j < DIM; j++) {
@@ -146,7 +132,7 @@ public class Board {
             }
         }
 
-        return -1;
+        return ALL_CELLS_TAKEN;
     }
 
     public static int convertToTextViewIndex(int i) {

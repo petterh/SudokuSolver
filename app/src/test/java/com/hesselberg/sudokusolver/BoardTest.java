@@ -1,13 +1,13 @@
 package com.hesselberg.sudokusolver;
 
-import org.junit.After;
-import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 public class BoardTest {
 
@@ -77,14 +77,6 @@ public class BoardTest {
             "  5    16" +
             "4  2  73 ";
 
-    @Before
-    public void setUp() throws Exception {
-    }
-
-    @After
-    public void tearDown() throws Exception {
-    }
-
     @Test
     public void verify() {
         assertEquals(SOLUTION.length(), TEST_BOARD.length());
@@ -107,6 +99,11 @@ public class BoardTest {
         System.out.println(System.currentTimeMillis() - start);
         assertEquals(1, solutions.size());
         assertEquals(SOLUTION, solutions.get(0));
+
+        board = new Board(ERROR1);
+        solutions.clear();
+        assertFalse(board.solve(solutions));
+        assertEquals(0, solutions.size());
     }
 
     @Test
@@ -133,6 +130,7 @@ public class BoardTest {
     public void verifyConversionSymmetry() {
         for (int i = 0; i < Board.DIM * Board.DIM; i++) {
             assertEquals(i, Board.convertToTextViewIndex(Board.convertToTextViewIndex(i)));
+            assertEquals(i, Board.convertToStringIndex(Board.convertToStringIndex(i)));
         }
     }
 
@@ -151,10 +149,5 @@ public class BoardTest {
     public void testToString() {
         assertEquals(TEST_BOARD, new Board(TEST_BOARD).toString());
         assertEquals(SOLUTION, new Board(SOLUTION).toString());
-    }
-
-    @Test
-    public void constructor() {
-        Board board = new Board();
     }
 }
