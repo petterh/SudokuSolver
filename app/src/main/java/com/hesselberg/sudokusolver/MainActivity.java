@@ -6,18 +6,16 @@ import android.os.AsyncTask;
 import android.os.Bundle;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.hesselberg.sudokusolver.databinding.ActivityMainBinding;
+
 import java.util.ArrayList;
 import java.util.List;
-
-import butterknife.ButterKnife;
-import butterknife.OnClick;
-import butterknife.Unbinder;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -32,19 +30,28 @@ public class MainActivity extends AppCompatActivity {
             "  5   1 6" +
             "4  2  73 ";
 
-    private Unbinder unbinder;
+    private ActivityMainBinding binding;
+
+    private int count;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
-        unbinder = ButterKnife.bind(this);
+        binding = ActivityMainBinding.inflate(getLayoutInflater());
+        setContentView(binding.getRoot());
+        binding.btnCapture.setOnClickListener(v -> showBoard(TEST_BOARD, true));
+        binding.btnSolve.setOnClickListener(v -> new SolveTask().execute(TEST_BOARD));
     }
 
     @Override
     protected void onDestroy() {
-        unbinder.unbind();
         super.onDestroy();
+    }
+
+    @NonNull
+    private List<TextView> getTextViews() {
+        count = 0;
+        return getTextViews(binding.board);
     }
 
     @NonNull
@@ -57,33 +64,19 @@ public class MainActivity extends AppCompatActivity {
                 textViews.addAll(getTextViews((ViewGroup) child));
             } else if (child instanceof TextView) {
                 textViews.add((TextView) child);
+                int finalCount = count++;
+                child.setOnClickListener(v ->
+                        Toast.makeText(MainActivity.this, "Edit " + finalCount, Toast.LENGTH_SHORT).show());
             }
         }
 
         return textViews;
     }
 
-    @OnClick(R.id.btn_capture)
-    void captureClicked() {
-        List<TextView> textViews = getTextViews(this.<LinearLayout>findViewById(R.id.board));
-        for (int i = 0; i < Board.DIM * Board.DIM; i++) {
-            int textViewIndex = Board.convertToTextViewIndex(i);
-            TextView textView = textViews.get(textViewIndex);
-            char[] ch = new char[1];
-            ch[0] = TEST_BOARD.charAt(i);
-            textView.setText(ch, 0, 1);
-            if (ch[0] != ' ') {
-                textView.setTypeface(null, Typeface.BOLD);
-                textView.setTextColor(0xff000000);
-            }
-        }
-    }
-
     @SuppressLint("StaticFieldLeak")
     private class SolveTask extends AsyncTask<String, String, List<String>> {
         @Override
         protected void onPreExecute() {
-            super.onPreExecute();
             enableButtons(false);
         }
 
@@ -96,28 +89,28 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         protected void onPostExecute(List<String> solutions) {
-            super.onPostExecute(solutions);
-            String solution = solutions.get(0);
-            List<TextView> textViews = getTextViews(findViewById(R.id.board));
-            for (int i = 0; i < Board.DIM * Board.DIM; i++) {
-                int textViewIndex = Board.convertToTextViewIndex(i);
-                TextView textView = textViews.get(textViewIndex);
-                char[] ch = new char[1];
-                ch[0] = solution.charAt(i);
-                textView.setText(ch, 0, 1);
-            }
-
+            showBoard(solutions.get(0), false);
             enableButtons(true);
-        }
-
-        private void enableButtons(boolean enable) {
-            findViewById(R.id.btn_capture).setEnabled(enable);
-            findViewById(R.id.btn_solve).setEnabled(enable);
         }
     }
 
-    @OnClick(R.id.btn_solve)
-    void solveClicked() {
-        new SolveTask().execute(TEST_BOARD);
+    private void enableButtons(boolean enable) {
+        binding.btnCapture.setEnabled(enable);
+        binding.btnSolve.setEnabled(enable);
+    }
+
+    private void showBoard(@NonNull String solution, boolean setBold) {
+        List<TextView> textViews = getTextViews();
+        for (int i = 0; i < Board.DIM * Board.DIM; i++) {
+            int textViewIndex = Board.convertToTextViewIndex(i);
+            TextView textView = textViews.get(textViewIndex);
+            char[] ch = new char[1];
+            ch[0] = solution.charAt(i);
+            textView.setText(ch, 0, 1);
+            if (setBold && ch[0] != ' ') {
+                textView.setTypeface(null, Typeface.BOLD);
+                textView.setTextColor(0xff000000);
+            }
+        }
     }
 }
