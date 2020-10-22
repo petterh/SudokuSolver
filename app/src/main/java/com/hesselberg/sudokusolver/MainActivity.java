@@ -32,8 +32,6 @@ public class MainActivity extends AppCompatActivity {
 
     private ActivityMainBinding binding;
 
-    private int count;
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -41,6 +39,14 @@ public class MainActivity extends AppCompatActivity {
         setContentView(binding.getRoot());
         binding.btnCapture.setOnClickListener(v -> showBoard(TEST_BOARD, true));
         binding.btnSolve.setOnClickListener(v -> new SolveTask().execute(TEST_BOARD));
+
+        List<TextView> textViews = getTextViews();
+        int count = 0;
+        for (TextView textView : textViews) {
+            final int i = Board.convertToStringIndex(count++);
+            textView.setOnClickListener(v ->
+                    Toast.makeText(MainActivity.this, "Edit " + i, Toast.LENGTH_SHORT).show());
+        }
     }
 
     @Override
@@ -50,7 +56,6 @@ public class MainActivity extends AppCompatActivity {
 
     @NonNull
     private List<TextView> getTextViews() {
-        count = 0;
         return getTextViews(binding.board);
     }
 
@@ -64,9 +69,6 @@ public class MainActivity extends AppCompatActivity {
                 textViews.addAll(getTextViews((ViewGroup) child));
             } else if (child instanceof TextView) {
                 textViews.add((TextView) child);
-                int finalCount = count++;
-                child.setOnClickListener(v ->
-                        Toast.makeText(MainActivity.this, "Edit " + finalCount, Toast.LENGTH_SHORT).show());
             }
         }
 
