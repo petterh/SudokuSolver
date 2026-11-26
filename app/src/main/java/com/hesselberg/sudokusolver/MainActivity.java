@@ -1,8 +1,6 @@
 package com.hesselberg.sudokusolver;
 
-import android.annotation.SuppressLint;
 import android.graphics.Typeface;
-import android.os.AsyncTask;
 import android.os.Bundle;
 import android.view.View;
 import android.view.ViewGroup;
@@ -16,6 +14,8 @@ import com.hesselberg.sudokusolver.databinding.ActivityMainBinding;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -31,6 +31,7 @@ public class MainActivity extends AppCompatActivity {
             "4  2  73 ";
 
     private ActivityMainBinding binding;
+    private final ExecutorService solverExecutor = Executors.newSingleThreadExecutor();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -38,7 +39,7 @@ public class MainActivity extends AppCompatActivity {
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
         binding.btnCapture.setOnClickListener(v -> showBoard(TEST_BOARD, true));
-        binding.btnSolve.setOnClickListener(v -> new SolveTask().execute(TEST_BOARD));
+        binding.btnSolve.setOnClickListener(v -> solveBoard());
 
         List<TextView> textViews = getTextViews();
         int count = 0;
@@ -51,7 +52,23 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        solverExecutor.shutdownNow();
         super.onDestroy();
+    }
+
+    private void solveBoard() {
+        enableButtons(false);
+        solverExecutor.execute(() -> {
+            List<String> solutions = new ArrayList<>(1);
+            new Board(TEST_BOARD).solve(solutions);
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) {
+                    return;
+                }
+                showBoard(solutions.get(0), false);
+                enableButtons(true);
+            });
+        });
     }
 
     @NonNull
@@ -73,27 +90,6 @@ public class MainActivity extends AppCompatActivity {
         }
 
         return textViews;
-    }
-
-    @SuppressLint("StaticFieldLeak")
-    private class SolveTask extends AsyncTask<String, String, List<String>> {
-        @Override
-        protected void onPreExecute() {
-            enableButtons(false);
-        }
-
-        @Override
-        protected List<String> doInBackground(String... strings) {
-            List<String> solutions = new ArrayList<>(1);
-            new Board(TEST_BOARD).solve(solutions);
-            return solutions;
-        }
-
-        @Override
-        protected void onPostExecute(List<String> solutions) {
-            showBoard(solutions.get(0), false);
-            enableButtons(true);
-        }
     }
 
     private void enableButtons(boolean enable) {
