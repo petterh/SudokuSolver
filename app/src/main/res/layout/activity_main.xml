@@ -1,58 +1,74 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
-    android:layout_width="wrap_content"
-    android:layout_height="wrap_content"
-    android:layout_gravity="center_horizontal"
-    android:gravity="center_horizontal"
-    android:padding="30dp"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fitsSystemWindows="true"
     android:orientation="vertical"
     tools:context=".MainActivity">
 
+    <!-- Offset below the action bar; outer fitsSystemWindows clears the status bar. -->
     <LinearLayout
-        android:id="@+id/board"
-        android:padding="1dp"
-        android:background="@drawable/group_border"
-        style="@style/digit_row"
-        android:orientation="vertical">
-        <LinearLayout
-            style="@style/digit_row">
-            <include layout="@layout/group" />
-            <include layout="@layout/group" />
-            <include layout="@layout/group" />
-        </LinearLayout>
-        <LinearLayout
-            style="@style/digit_row">
-            <include layout="@layout/group" />
-            <include layout="@layout/group" />
-            <include layout="@layout/group" />
-        </LinearLayout>
-        <LinearLayout
-            style="@style/digit_row">
-            <include layout="@layout/group" />
-            <include layout="@layout/group" />
-            <include layout="@layout/group" />
-        </LinearLayout>
-    </LinearLayout>
-
-    <GridLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:paddingTop="15dp"
-        android:orientation="horizontal"
-        >
-        <androidx.appcompat.widget.AppCompatButton
-            android:id="@+id/btn_capture"
-            android:drawableStart="@android:drawable/ic_menu_camera"
-            android:text="@string/capture"
-            style="@style/button" />
-        <androidx.appcompat.widget.AppCompatButton
-            android:id="@+id/btn_solve"
-            android:layout_gravity="end"
-            android:drawableStart="@android:drawable/ic_media_play"
-            android:text="@string/solve"
-            style="@style/button" />
-    </GridLayout>
+        android:layout_marginTop="?attr/actionBarSize"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:padding="30dp">
 
+        <LinearLayout
+            android:id="@+id/board"
+            style="@style/digit_row"
+            android:background="@drawable/group_border"
+            android:orientation="vertical"
+            android:padding="1dp">
+
+            <LinearLayout style="@style/digit_row">
+
+                <include layout="@layout/group" />
+
+                <include layout="@layout/group" />
+
+                <include layout="@layout/group" />
+            </LinearLayout>
+
+            <LinearLayout style="@style/digit_row">
+
+                <include layout="@layout/group" />
+
+                <include layout="@layout/group" />
+
+                <include layout="@layout/group" />
+            </LinearLayout>
+
+            <LinearLayout style="@style/digit_row">
+
+                <include layout="@layout/group" />
+
+                <include layout="@layout/group" />
+
+                <include layout="@layout/group" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <GridLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingTop="15dp">
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btn_capture"
+                style="@style/button"
+                android:drawableStart="@android:drawable/ic_menu_camera"
+                android:text="@string/capture" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btn_solve"
+                style="@style/button"
+                android:layout_gravity="end"
+                android:drawableStart="@android:drawable/ic_media_play"
+                android:text="@string/solve" />
+        </GridLayout>
+    </LinearLayout>
 </LinearLayout>
