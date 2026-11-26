@@ -1,15 +1,24 @@
 package com.hesselberg.sudokusolver;
 
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
 import android.graphics.Typeface;
 import android.os.Bundle;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
 
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.hesselberg.sudokusolver.databinding.ActivityMainBinding;
 
 import java.util.ArrayList;
@@ -33,12 +42,31 @@ public class MainActivity extends AppCompatActivity {
     private ActivityMainBinding binding;
     private final ExecutorService solverExecutor = Executors.newSingleThreadExecutor();
 
+    /** Puzzle currently shown / solved. Capture confirm still loads {@link #TEST_BOARD}. */
+    private String currentBoard = TEST_BOARD;
+
+    private final ActivityResultLauncher<String> requestCameraPermission =
+            registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
+                if (granted) {
+                    launchCamera();
+                } else {
+                    Toast.makeText(this, R.string.camera_permission_denied, Toast.LENGTH_LONG).show();
+                }
+            });
+
+    private final ActivityResultLauncher<Void> takePicturePreview =
+            registerForActivityResult(new ActivityResultContracts.TakePicturePreview(), bitmap -> {
+                if (bitmap != null) {
+                    showCaptureConfirmDialog(bitmap);
+                }
+            });
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
-        binding.btnCapture.setOnClickListener(v -> showBoard(TEST_BOARD, true));
+        binding.btnCapture.setOnClickListener(v -> startCapture());
         binding.btnSolve.setOnClickListener(v -> solveBoard());
 
         List<TextView> textViews = getTextViews();
@@ -56,16 +84,62 @@ public class MainActivity extends AppCompatActivity {
         super.onDestroy();
     }
 
+    private void startCapture() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+                == PackageManager.PERMISSION_GRANTED) {
+            launchCamera();
+        } else {
+            requestCameraPermission.launch(Manifest.permission.CAMERA);
+        }
+    }
+
+    private void launchCamera() {
+        try {
+            takePicturePreview.launch(null);
+        } catch (Exception e) {
+            Toast.makeText(this, R.string.camera_unavailable, Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void showCaptureConfirmDialog(@NonNull Bitmap bitmap) {
+        View content = LayoutInflater.from(this).inflate(R.layout.dialog_capture_confirm, null, false);
+        ImageView preview = content.findViewById(R.id.capture_preview);
+        preview.setImageBitmap(bitmap);
+
+        new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.capture_preview_title)
+                .setView(content)
+                .setPositiveButton(R.string.capture_confirm, (dialog, which) -> applyCapturedPuzzlePlaceholder())
+                .setNeutralButton(R.string.capture_retake, (dialog, which) -> launchCamera())
+                .setNegativeButton(R.string.capture_cancel, null)
+                .show();
+    }
+
+    /**
+     * Milestone 1: after the user confirms a photo, load the hard-coded puzzle.
+     * Later milestones will OCR the bitmap into an 81-character board string instead.
+     */
+    private void applyCapturedPuzzlePlaceholder() {
+        currentBoard = TEST_BOARD;
+        showBoard(currentBoard, true);
+    }
+
     private void solveBoard() {
         enableButtons(false);
+        final String boardToSolve = currentBoard;
         solverExecutor.execute(() -> {
             List<String> solutions = new ArrayList<>(1);
-            new Board(TEST_BOARD).solve(solutions);
+            new Board(boardToSolve).solve(solutions);
             runOnUiThread(() -> {
                 if (isFinishing() || isDestroyed()) {
                     return;
                 }
-                showBoard(solutions.get(0), false);
+                if (!solutions.isEmpty()) {
+                    currentBoard = solutions.get(0);
+                    showBoard(currentBoard, false);
+                } else {
+                    Toast.makeText(this, "No solution found", Toast.LENGTH_SHORT).show();
+                }
                 enableButtons(true);
             });
         });
