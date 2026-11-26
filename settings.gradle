@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Sudoku Solver"
+rootProject.name = "SudokuSolver"
 include ':app'
