@@ -2,6 +2,7 @@ package com.hesselberg.sudokusolver;
 
 import android.Manifest;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
@@ -111,7 +112,7 @@ public class MainActivity extends AppCompatActivity {
 
         if (savedInstanceState != null) {
             restoreBoardState(savedInstanceState);
-        } else {
+        } else if (!restorePersistedBoard()) {
             markCluesFromBoard(currentBoard);
         }
         List<TextView> textViews = getTextViews();
@@ -128,6 +129,12 @@ public class MainActivity extends AppCompatActivity {
         super.onSaveInstanceState(outState);
         outState.putString(STATE_BOARD, currentBoard);
         outState.putBooleanArray(STATE_CLUES, clueCells);
+    }
+
+    @Override
+    protected void onPause() {
+        persistBoard();
+        super.onPause();
     }
 
     @Override
@@ -150,6 +157,32 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /** @return true when a persisted board was loaded */
+    private boolean restorePersistedBoard() {
+        SharedPreferences prefs = boardPrefs();
+        String board = BoardStore.loadBoard(prefs);
+        if (board == null) {
+            return false;
+        }
+        currentBoard = board;
+        boolean[] clues = BoardStore.loadClues(prefs);
+        if (clues != null) {
+            System.arraycopy(clues, 0, clueCells, 0, clueCells.length);
+        } else {
+            markCluesFromBoard(currentBoard);
+        }
+        return true;
+    }
+
+    private void persistBoard() {
+        BoardStore.save(boardPrefs(), currentBoard, clueCells);
+    }
+
+    @NonNull
+    private SharedPreferences boardPrefs() {
+        return getSharedPreferences(BoardStore.PREFS_NAME, MODE_PRIVATE);
+    }
+
     private void confirmClearBoard() {
         new MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.clear_confirm_title)
@@ -162,6 +195,7 @@ public class MainActivity extends AppCompatActivity {
     private void clearBoard() {
         currentBoard = SampleBoards.EMPTY;
         markCluesFromBoard(currentBoard);
+        BoardStore.clear(boardPrefs());
         showBoard(currentBoard);
     }
 
@@ -272,6 +306,7 @@ public class MainActivity extends AppCompatActivity {
         currentBoard = board;
         markCluesFromBoard(board);
         showBoard(currentBoard);
+        persistBoard();
 
         int clues = SudokuBoardRecognizer.countClues(board);
         Toast.makeText(this, getString(R.string.recognition_success, clues), Toast.LENGTH_SHORT).show();
@@ -315,6 +350,7 @@ public class MainActivity extends AppCompatActivity {
         clueCells[stringIndex] = value >= '1' && value <= '9';
         // Refresh all cells: fixing one conflict can clear others in the same unit.
         showBoard(currentBoard);
+        persistBoard();
     }
 
     @VisibleForTesting
@@ -360,6 +396,7 @@ public class MainActivity extends AppCompatActivity {
                     // Keep clueCells as-is so given/edited clues stay bold after solving.
                     currentBoard = solutions.get(0);
                     showBoard(currentBoard);
+                    persistBoard();
                     if (solutions.size() > 1) {
                         Toast.makeText(this, R.string.solve_multiple_solutions, Toast.LENGTH_LONG)
                                 .show();
