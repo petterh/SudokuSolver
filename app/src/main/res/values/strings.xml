@@ -2,6 +2,9 @@
     <string name="app_name">Sudoku Solver</string>
     <string name="solve">Solve</string>
     <string name="capture">Capture</string>
+    <string name="capture_source_title">Load puzzle photo</string>
+    <string name="capture_source_camera">Camera</string>
+    <string name="capture_source_gallery">Gallery</string>
     <string name="capture_preview_title">Use this photo?</string>
     <string name="capture_preview_description">Photo of the Sudoku board</string>
     <string name="capture_confirm">Use photo</string>

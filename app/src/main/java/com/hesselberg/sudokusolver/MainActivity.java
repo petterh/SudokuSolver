@@ -88,6 +88,20 @@ public class MainActivity extends AppCompatActivity {
                 }
             });
 
+    private final ActivityResultLauncher<String> pickGalleryImage =
+            registerForActivityResult(new ActivityResultContracts.GetContent(), uri -> {
+                if (uri == null) {
+                    return;
+                }
+                // Gallery photos have no framing overlay; OpenCV isolates the board.
+                Bitmap bitmap = loadCaptureBitmap(uri, null);
+                if (bitmap != null) {
+                    showCaptureConfirmDialog(bitmap);
+                } else {
+                    Toast.makeText(this, R.string.capture_failed, Toast.LENGTH_LONG).show();
+                }
+            });
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -116,6 +130,25 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void startCapture() {
+        new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.capture_source_title)
+                .setItems(
+                        new CharSequence[]{
+                                getString(R.string.capture_source_camera),
+                                getString(R.string.capture_source_gallery)
+                        },
+                        (dialog, which) -> {
+                            if (which == 0) {
+                                startCameraCapture();
+                            } else {
+                                launchGallery();
+                            }
+                        })
+                .setNegativeButton(R.string.capture_cancel, null)
+                .show();
+    }
+
+    private void startCameraCapture() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
                 == PackageManager.PERMISSION_GRANTED) {
             launchCamera();
@@ -126,6 +159,10 @@ public class MainActivity extends AppCompatActivity {
 
     private void launchCamera() {
         captureBoard.launch(new Intent(this, CaptureActivity.class));
+    }
+
+    private void launchGallery() {
+        pickGalleryImage.launch("image/*");
     }
 
     @Nullable
@@ -262,7 +299,7 @@ public class MainActivity extends AppCompatActivity {
                 .setTitle(R.string.capture_preview_title)
                 .setView(content)
                 .setPositiveButton(R.string.capture_confirm, (dialog, which) -> recognizeCapturedBoard(bitmap))
-                .setNeutralButton(R.string.capture_retake, (dialog, which) -> launchCamera())
+                .setNeutralButton(R.string.capture_retake, (dialog, which) -> startCapture())
                 .setNegativeButton(R.string.capture_cancel, null)
                 .show();
     }
