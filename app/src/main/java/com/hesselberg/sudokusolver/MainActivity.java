@@ -42,6 +42,8 @@ import java.util.concurrent.Executors;
 public class MainActivity extends AppCompatActivity {
 
     private static final int CAPTURE_MAX_EDGE_PX = 1600;
+    private static final String STATE_BOARD = "state_board";
+    private static final String STATE_CLUES = "state_clues";
 
     private ActivityMainBinding binding;
     private final ExecutorService backgroundExecutor = Executors.newSingleThreadExecutor();
@@ -108,11 +110,16 @@ public class MainActivity extends AppCompatActivity {
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
         binding.btnCapture.setOnClickListener(v -> startCapture());
+        binding.btnClear.setOnClickListener(v -> confirmClearBoard());
         binding.btnSolve.setOnClickListener(v -> solveBoard());
         // Warm up native OpenCV so the first capture does not pay load cost mid-OCR.
         backgroundExecutor.execute(SudokuBoardExtractor::ensureOpenCvLoaded);
 
-        markCluesFromBoard(currentBoard);
+        if (savedInstanceState != null) {
+            restoreBoardState(savedInstanceState);
+        } else {
+            markCluesFromBoard(currentBoard);
+        }
         List<TextView> textViews = getTextViews();
         int count = 0;
         for (TextView textView : textViews) {
@@ -123,10 +130,45 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void onSaveInstanceState(@NonNull Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putString(STATE_BOARD, currentBoard);
+        outState.putBooleanArray(STATE_CLUES, clueCells);
+    }
+
+    @Override
     protected void onDestroy() {
         backgroundExecutor.shutdownNow();
         boardRecognizer.close();
         super.onDestroy();
+    }
+
+    private void restoreBoardState(@NonNull Bundle savedInstanceState) {
+        String board = savedInstanceState.getString(STATE_BOARD);
+        boolean[] clues = savedInstanceState.getBooleanArray(STATE_CLUES);
+        if (board != null && board.length() == Board.DIM * Board.DIM) {
+            currentBoard = board;
+        }
+        if (clues != null && clues.length == clueCells.length) {
+            System.arraycopy(clues, 0, clueCells, 0, clueCells.length);
+        } else {
+            markCluesFromBoard(currentBoard);
+        }
+    }
+
+    private void confirmClearBoard() {
+        new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.clear_confirm_title)
+                .setMessage(R.string.clear_confirm_message)
+                .setPositiveButton(R.string.clear, (dialog, which) -> clearBoard())
+                .setNegativeButton(R.string.capture_cancel, null)
+                .show();
+    }
+
+    private void clearBoard() {
+        currentBoard = SampleBoards.EMPTY;
+        markCluesFromBoard(currentBoard);
+        showBoard(currentBoard);
     }
 
     private void startCapture() {
@@ -401,6 +443,16 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void solveBoard() {
+        if (SudokuBoardRecognizer.countClues(currentBoard) == 0) {
+            Toast.makeText(this, R.string.solve_empty_board, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Board board = new Board(currentBoard);
+        if (!board.cluesAreConsistent()) {
+            Toast.makeText(this, R.string.solve_has_conflicts, Toast.LENGTH_SHORT).show();
+            return;
+        }
+
         enableButtons(false);
         final String boardToSolve = currentBoard;
         backgroundExecutor.execute(() -> {
@@ -415,7 +467,7 @@ public class MainActivity extends AppCompatActivity {
                     currentBoard = solutions.get(0);
                     showBoard(currentBoard);
                 } else {
-                    Toast.makeText(this, "No solution found", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, R.string.no_solution, Toast.LENGTH_SHORT).show();
                 }
                 enableButtons(true);
             });
@@ -445,6 +497,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void enableButtons(boolean enable) {
         binding.btnCapture.setEnabled(enable);
+        binding.btnClear.setEnabled(enable);
         binding.btnSolve.setEnabled(enable);
     }
 
