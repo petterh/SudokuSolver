@@ -11,27 +11,42 @@ import static org.junit.Assert.assertTrue;
 public class BoardHistoryTest {
 
     @Test
-    public void pushPop_restoresPriorSnapshot() {
+    public void undoRedo_roundTrips() {
         BoardHistory history = new BoardHistory();
-        boolean[] cluesA = new boolean[Board.DIM * Board.DIM];
-        cluesA[0] = true;
-        boolean[] cluesB = new boolean[Board.DIM * Board.DIM];
-        cluesB[1] = true;
+        boolean[] emptyClues = new boolean[Board.DIM * Board.DIM];
+        boolean[] sampleClues = new boolean[Board.DIM * Board.DIM];
+        sampleClues[0] = true;
 
-        history.push(SampleBoards.EMPTY, cluesA);
-        history.push(SampleBoards.SUDOKU_SAMPLE, cluesB);
-
-        BoardHistory.Snapshot undone = history.pop();
+        history.push(SampleBoards.EMPTY, emptyClues);
+        // Live board is now the sample; undo should restore EMPTY and stash sample on redo.
+        BoardHistory.Snapshot undone = history.undo(SampleBoards.SUDOKU_SAMPLE, sampleClues);
         assertNotNull(undone);
-        assertEquals(SampleBoards.SUDOKU_SAMPLE, undone.board);
-        assertTrue(undone.clues[1]);
-        assertFalse(undone.clues[0]);
+        assertEquals(SampleBoards.EMPTY, undone.board);
+        assertTrue(history.canRedo());
+        assertFalse(history.canUndo());
 
-        BoardHistory.Snapshot earlier = history.pop();
-        assertNotNull(earlier);
-        assertEquals(SampleBoards.EMPTY, earlier.board);
-        assertTrue(earlier.clues[0]);
-        assertNull(history.pop());
+        BoardHistory.Snapshot redone = history.redo(SampleBoards.EMPTY, emptyClues);
+        assertNotNull(redone);
+        assertEquals(SampleBoards.SUDOKU_SAMPLE, redone.board);
+        assertTrue(redone.clues[0]);
+        assertTrue(history.canUndo());
+        assertFalse(history.canRedo());
+    }
+
+    @Test
+    public void push_clearsRedoBranch() {
+        BoardHistory history = new BoardHistory();
+        boolean[] clues = new boolean[Board.DIM * Board.DIM];
+        history.push(SampleBoards.EMPTY, clues);
+        history.undo(SampleBoards.SUDOKU_SAMPLE, clues);
+        assertTrue(history.canRedo());
+
+        char[] edited = SampleBoards.EMPTY.toCharArray();
+        edited[0] = '5';
+        history.push(SampleBoards.EMPTY, clues);
+        assertFalse(history.canRedo());
+        assertEquals(1, history.undoSize());
+        assertEquals(0, history.redoSize());
     }
 
     @Test
@@ -40,7 +55,7 @@ public class BoardHistoryTest {
         boolean[] clues = new boolean[Board.DIM * Board.DIM];
         history.push(SampleBoards.EMPTY, clues);
         history.push(SampleBoards.EMPTY, clues);
-        assertEquals(1, history.size());
+        assertEquals(1, history.undoSize());
     }
 
     @Test
@@ -55,9 +70,9 @@ public class BoardHistoryTest {
         two[0] = '2';
         history.push(new String(two), clues);
 
-        assertEquals(2, history.size());
-        assertEquals('2', history.pop().board.charAt(0));
-        assertEquals('1', history.pop().board.charAt(0));
-        assertNull(history.pop());
+        assertEquals(2, history.undoSize());
+        assertEquals('2', history.undo(SampleBoards.EMPTY, clues).board.charAt(0));
+        assertEquals('1', history.undo(SampleBoards.EMPTY, clues).board.charAt(0));
+        assertNull(history.undo(SampleBoards.EMPTY, clues));
     }
 }

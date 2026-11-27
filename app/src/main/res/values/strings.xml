@@ -3,7 +3,9 @@
     <string name="solve">Solve</string>
     <string name="clear">Clear</string>
     <string name="undo">Undo</string>
+    <string name="redo">Redo</string>
     <string name="undo_empty">Nothing to undo</string>
+    <string name="redo_empty">Nothing to redo</string>
     <string name="clear_confirm_title">Clear board?</string>
     <string name="clear_confirm_message">This removes all digits from the board.</string>
     <string name="no_solution">No solution found</string>

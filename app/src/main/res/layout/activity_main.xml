@@ -130,6 +130,14 @@
                 android:drawableStart="@android:drawable/ic_menu_revert"
                 android:enabled="false"
                 android:text="@string/undo" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btn_redo"
+                style="@style/button"
+                android:layout_marginStart="8dp"
+                android:drawableStart="@android:drawable/ic_menu_rotate"
+                android:enabled="false"
+                android:text="@string/redo" />
         </LinearLayout>
     </LinearLayout>
 </LinearLayout>
