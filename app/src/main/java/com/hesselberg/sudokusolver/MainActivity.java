@@ -48,7 +48,7 @@ public class MainActivity extends AppCompatActivity {
     private final SudokuBoardRecognizer boardRecognizer = new SudokuBoardRecognizer();
 
     /** Puzzle currently shown / solved. */
-    private String currentBoard = SampleBoards.SUDOKU_SAMPLE;
+    private String currentBoard = SampleBoards.EMPTY;
     /** True for cells treated as given clues (shown bold). */
     private final boolean[] clueCells = new boolean[Board.DIM * Board.DIM];
 
