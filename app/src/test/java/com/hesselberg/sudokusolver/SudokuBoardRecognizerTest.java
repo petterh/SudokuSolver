@@ -96,6 +96,28 @@ public class SudokuBoardRecognizerTest {
     }
 
     @Test
+    public void mergeBoardPreferPrimary_rejectsConflictingFillUnderExistingDigit() {
+        // Primary has a 2 in r0c5; a spurious per-cell 2 in r1c5 must not be merged.
+        char[] primary = SampleBoards.EMPTY.toCharArray();
+        primary[5] = '2';
+        char[] secondary = SampleBoards.EMPTY.toCharArray();
+        secondary[5 + 9] = '2';
+        String merged = SudokuBoardRecognizer.mergeBoardPreferPrimary(
+                new String(primary), new String(secondary));
+        assertEquals('2', merged.charAt(5));
+        assertEquals(' ', merged.charAt(5 + 9));
+    }
+
+    @Test
+    public void normalizeStrictDigit_rejectsLetterOneConfusions() {
+        assertEquals(Character.valueOf('1'), SudokuBoardRecognizer.normalizeStrictDigit("1"));
+        assertNull(SudokuBoardRecognizer.normalizeStrictDigit("l"));
+        assertNull(SudokuBoardRecognizer.normalizeStrictDigit("|"));
+        assertNull(SudokuBoardRecognizer.normalizeStrictDigit("I"));
+        assertNull(SudokuBoardRecognizer.normalizeStrictDigit("g"));
+    }
+
+    @Test
     public void normalizeSudokuDigit_mapsNineConfusionsAndUnicode() {
         assertEquals(Character.valueOf('9'), SudokuBoardRecognizer.normalizeSudokuDigit("9"));
         assertEquals(Character.valueOf('9'), SudokuBoardRecognizer.normalizeSudokuDigit("g"));

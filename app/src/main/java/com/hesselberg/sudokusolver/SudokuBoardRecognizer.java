@@ -119,7 +119,8 @@ public final class SudokuBoardRecognizer {
     }
 
     /**
-     * Keep {@code primary} digits; fill blanks from {@code secondary}.
+     * Keep {@code primary} digits; fill blanks from {@code secondary} only when the
+     * fill does not duplicate a digit already present in that row, column, or box.
      */
     @VisibleForTesting
     @NonNull
@@ -127,14 +128,45 @@ public final class SudokuBoardRecognizer {
         char[] merged = primary.toCharArray();
         int n = Math.min(merged.length, secondary.length());
         for (int i = 0; i < n; i++) {
-            if (merged[i] == ' ') {
-                char extra = secondary.charAt(i);
-                if (extra >= '1' && extra <= '9') {
-                    merged[i] = extra;
-                }
+            if (merged[i] != ' ') {
+                continue;
+            }
+            char extra = secondary.charAt(i);
+            if (extra < '1' || extra > '9') {
+                continue;
+            }
+            if (!digitConflicts(merged, i, extra)) {
+                merged[i] = extra;
             }
         }
         return new String(merged);
+    }
+
+    /** True if {@code digit} already appears in the same row, column, or box. */
+    @VisibleForTesting
+    static boolean digitConflicts(@NonNull char[] board, int index, char digit) {
+        int row = index / Board.DIM;
+        int col = index % Board.DIM;
+        for (int c = 0; c < Board.DIM; c++) {
+            if (board[row * Board.DIM + c] == digit) {
+                return true;
+            }
+        }
+        for (int r = 0; r < Board.DIM; r++) {
+            if (board[r * Board.DIM + col] == digit) {
+                return true;
+            }
+        }
+        int boxRow = (row / 3) * 3;
+        int boxCol = (col / 3) * 3;
+        for (int r = boxRow; r < boxRow + 3; r++) {
+            for (int c = boxCol; c < boxCol + 3; c++) {
+                if (board[r * Board.DIM + c] == digit) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**
@@ -149,15 +181,18 @@ public final class SudokuBoardRecognizer {
         int height = warped.getHeight();
         float cellW = width / (float) Board.DIM;
         float cellH = height / (float) Board.DIM;
-        float insetX = cellW * 0.18f;
-        float insetY = cellH * 0.18f;
+        // Heavier top inset avoids the digit from the cell above bleeding into this crop
+        // (e.g. the stem of a 2 read as 1 in the empty cell beneath it).
+        float insetX = cellW * 0.22f;
+        float insetTop = cellH * 0.30f;
+        float insetBottom = cellH * 0.20f;
 
         for (int row = 0; row < Board.DIM; row++) {
             for (int col = 0; col < Board.DIM; col++) {
                 int left = Math.max(0, Math.round(col * cellW + insetX));
-                int top = Math.max(0, Math.round(row * cellH + insetY));
+                int top = Math.max(0, Math.round(row * cellH + insetTop));
                 int right = Math.min(width, Math.round((col + 1) * cellW - insetX));
-                int bottom = Math.min(height, Math.round((row + 1) * cellH - insetY));
+                int bottom = Math.min(height, Math.round((row + 1) * cellH - insetBottom));
                 int cropW = right - left;
                 int cropH = bottom - top;
                 if (cropW < 4 || cropH < 4) {
@@ -169,7 +204,7 @@ public final class SudokuBoardRecognizer {
                         continue;
                     }
                     Text text = Tasks.await(textRecognizer.process(InputImage.fromBitmap(cell, 0)));
-                    Character digit = singleDigitFromText(text);
+                    Character digit = singleDigitFromCellText(text);
                     if (digit != null) {
                         cells[row * Board.DIM + col] = digit;
                     }
@@ -202,13 +237,18 @@ public final class SudokuBoardRecognizer {
                 total++;
             }
         }
-        return total == 0 || dark * 20 < total;
+        // Require clearer ink than a faint bleed / grid fragment (~10% dark samples).
+        return total == 0 || dark * 10 < total;
     }
 
-    /** Accept a cell only when OCR yields exactly one Sudoku digit. */
+    /**
+     * Accept a cell only when OCR yields exactly one real digit character.
+     * Letter confusions ({@code l}/{@code I}/{@code |}) are ignored here — they often
+     * come from grid lines or ink bleed and caused spurious 1s under digits above.
+     */
     @VisibleForTesting
     @Nullable
-    static Character singleDigitFromText(@NonNull Text text) {
+    static Character singleDigitFromCellText(@NonNull Text text) {
         List<Character> digits = new ArrayList<>(2);
         for (Text.TextBlock block : text.getTextBlocks()) {
             for (Text.Line line : block.getLines()) {
@@ -216,13 +256,13 @@ public final class SudokuBoardRecognizer {
                     List<? extends Text.Symbol> symbols = element.getSymbols();
                     if (symbols != null && !symbols.isEmpty()) {
                         for (Text.Symbol symbol : symbols) {
-                            Character digit = normalizeSudokuDigit(symbol.getText());
+                            Character digit = normalizeStrictDigit(symbol.getText());
                             if (digit != null) {
                                 digits.add(digit);
                             }
                         }
                     } else {
-                        Character digit = normalizeSudokuDigit(element.getText());
+                        Character digit = normalizeStrictDigit(element.getText());
                         if (digit != null) {
                             digits.add(digit);
                         }
@@ -234,6 +274,27 @@ public final class SudokuBoardRecognizer {
             return null;
         }
         return digits.get(0);
+    }
+
+    @VisibleForTesting
+    @Nullable
+    static Character normalizeStrictDigit(@Nullable String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String trimmed = raw.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        char ch = trimmed.charAt(0);
+        if (ch >= '1' && ch <= '9') {
+            return ch;
+        }
+        int unicodeDigit = Character.digit(ch, 10);
+        if (unicodeDigit >= 1 && unicodeDigit <= 9) {
+            return (char) ('0' + unicodeDigit);
+        }
+        return null;
     }
 
     public void close() {
