@@ -31,9 +31,10 @@
     <string name="recognizing_board">Reading puzzle…</string>
     <string name="recognition_failed">Could not read a Sudoku board from that photo. Try a clearer, straight-on shot.</string>
     <string name="recognition_invalid">Recognized digits conflict with Sudoku rules. Showing them anyway so you can edit.</string>
-    <string name="recognition_success">Loaded %1$d clues from the photo. Tap cells to fix mistakes.</string>
+    <string name="recognition_success">Loaded %1$d clues from the photo. Long-press a clue to fix it.</string>
     <string name="capture_failed">Could not save or read the photo.</string>
     <string name="edit_cell_title">Set digit</string>
+    <string name="edit_clue_locked">Long-press to edit a given clue</string>
     <string name="digit_1">1</string>
     <string name="digit_2">2</string>
     <string name="digit_3">3</string>

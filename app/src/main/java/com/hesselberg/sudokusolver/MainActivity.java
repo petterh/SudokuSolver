@@ -122,7 +122,11 @@ public class MainActivity extends AppCompatActivity {
         int count = 0;
         for (TextView textView : textViews) {
             final int stringIndex = Board.convertToStringIndex(count++);
-            textView.setOnClickListener(v -> editCell(stringIndex));
+            textView.setOnClickListener(v -> onCellClick(stringIndex));
+            textView.setOnLongClickListener(v -> {
+                onCellLongClick(stringIndex);
+                return true;
+            });
         }
         showBoard(currentBoard);
         updateHistoryButtons();
@@ -425,8 +429,22 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /** Opens a digit keypad so OCR mistakes can be fixed in one tap. */
-    private void editCell(int stringIndex) {
+    private void onCellClick(int stringIndex) {
+        if (clueCells[stringIndex]) {
+            Toast.makeText(this, R.string.edit_clue_locked, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        // Non-clue taps are user fills (not bold given clues).
+        editCell(stringIndex, false);
+    }
+
+    private void onCellLongClick(int stringIndex) {
+        // Long-press edits given clues (OCR fixes) or turns a fill into a clue.
+        editCell(stringIndex, true);
+    }
+
+    /** Opens a digit keypad. {@code asClue} keeps the cell bold when a digit is set. */
+    private void editCell(int stringIndex, boolean asClue) {
         View content = LayoutInflater.from(this).inflate(R.layout.dialog_digit_keypad, null, false);
         MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.edit_cell_title)
@@ -442,22 +460,21 @@ public class MainActivity extends AppCompatActivity {
         for (int i = 0; i < digitIds.length; i++) {
             final char digit = (char) ('1' + i);
             content.findViewById(digitIds[i]).setOnClickListener(v -> {
-                setCellValue(stringIndex, digit);
+                setCellValue(stringIndex, digit, asClue);
                 dialog.dismiss();
             });
         }
         content.findViewById(R.id.digit_clear).setOnClickListener(v -> {
-            setCellValue(stringIndex, ' ');
+            setCellValue(stringIndex, ' ', false);
             dialog.dismiss();
         });
         dialog.show();
     }
 
-    private void setCellValue(int stringIndex, char value) {
+    private void setCellValue(int stringIndex, char value, boolean asClue) {
         pushHistory();
         currentBoard = withCellValue(currentBoard, stringIndex, value);
-        // Manual digit → clue; manual clear → non-clue.
-        clueCells[stringIndex] = value >= '1' && value <= '9';
+        clueCells[stringIndex] = asClue && value >= '1' && value <= '9';
         // Refresh all cells: fixing one conflict can clear others in the same unit.
         showBoard(currentBoard);
         persistBoard();
