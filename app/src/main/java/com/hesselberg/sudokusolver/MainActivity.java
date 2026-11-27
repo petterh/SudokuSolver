@@ -339,7 +339,8 @@ public class MainActivity extends AppCompatActivity {
 
     private void setCellValue(int stringIndex, char value) {
         currentBoard = withCellValue(currentBoard, stringIndex, value);
-        clueCells[stringIndex] = value != ' ';
+        // Manual digit → clue; manual clear → non-clue.
+        clueCells[stringIndex] = value >= '1' && value <= '9';
         // Refresh all cells: fixing one conflict can clear others in the same unit.
         showBoard(currentBoard);
     }
@@ -362,12 +363,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void clearClueMarks() {
-        for (int i = 0; i < clueCells.length; i++) {
-            clueCells[i] = false;
-        }
-    }
-
     private void solveBoard() {
         enableButtons(false);
         final String boardToSolve = currentBoard;
@@ -379,8 +374,8 @@ public class MainActivity extends AppCompatActivity {
                     return;
                 }
                 if (!solutions.isEmpty()) {
+                    // Keep clueCells as-is so given/edited clues stay bold after solving.
                     currentBoard = solutions.get(0);
-                    clearClueMarks();
                     showBoard(currentBoard);
                 } else {
                     Toast.makeText(this, "No solution found", Toast.LENGTH_SHORT).show();
