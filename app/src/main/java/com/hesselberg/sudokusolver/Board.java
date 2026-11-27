@@ -63,6 +63,65 @@ public class Board {
         return true;
     }
 
+    /**
+     * Marks every filled cell that shares its digit with another cell in the same
+     * row, column, or block (string-index order).
+     */
+    @NonNull
+    public boolean[] conflictingCells() {
+        boolean[] conflict = new boolean[DIM * DIM];
+        for (int row = 0; row < DIM; row++) {
+            int[] indices = new int[DIM];
+            for (int col = 0; col < DIM; col++) {
+                indices[col] = row * DIM + col;
+            }
+            markDuplicateDigits(rows[row], indices, conflict);
+        }
+        for (int col = 0; col < DIM; col++) {
+            int[] indices = new int[DIM];
+            for (int row = 0; row < DIM; row++) {
+                indices[row] = row * DIM + col;
+            }
+            markDuplicateDigits(columns[col], indices, conflict);
+        }
+        for (int group = 0; group < DIM; group++) {
+            int[] indices = new int[DIM];
+            int groupRow = group / SUB;
+            int groupCol = group % SUB;
+            for (int sub = 0; sub < DIM; sub++) {
+                int row = groupRow * SUB + sub / SUB;
+                int col = groupCol * SUB + sub % SUB;
+                indices[sub] = row * DIM + col;
+            }
+            markDuplicateDigits(groups[group], indices, conflict);
+        }
+        return conflict;
+    }
+
+    private static void markDuplicateDigits(
+            @NonNull Field[] unit, @NonNull int[] stringIndices, @NonNull boolean[] conflict) {
+        int[] counts = new int[10];
+        for (Field field : unit) {
+            if (field == null) {
+                continue;
+            }
+            char value = field.getValue();
+            if (value >= '1' && value <= '9') {
+                counts[value - '0']++;
+            }
+        }
+        for (int i = 0; i < DIM; i++) {
+            Field field = unit[i];
+            if (field == null) {
+                continue;
+            }
+            char value = field.getValue();
+            if (value >= '1' && value <= '9' && counts[value - '0'] > 1) {
+                conflict[stringIndices[i]] = true;
+            }
+        }
+    }
+
     @VisibleForTesting
     boolean isAcceptable(int i) {
         int row  = i / DIM;
@@ -91,30 +150,45 @@ public class Board {
         return true;
     }
 
-    public boolean solve(List<String> solutions) {
-        return solve(solutions, 0);
+    /** Finds the first solution (if any) and appends it to {@code solutions}. */
+    public boolean solve(@NonNull List<String> solutions) {
+        return solve(solutions, 1);
     }
 
-    private boolean solve(List<String> solutions, int start) {
+    /**
+     * Collects up to {@code maxSolutions} complete boards into {@code solutions}.
+     * Useful to detect underdetermined puzzles (e.g. after OCR missed a clue).
+     *
+     * @return true if at least one solution was found
+     */
+    public boolean solve(@NonNull List<String> solutions, int maxSolutions) {
+        if (maxSolutions < 1) {
+            throw new IllegalArgumentException("maxSolutions must be >= 1");
+        }
+        collectSolutions(solutions, 0, maxSolutions);
+        return !solutions.isEmpty();
+    }
+
+    /**
+     * @return true when enough solutions have been collected and search should stop
+     */
+    private boolean collectSolutions(@NonNull List<String> solutions, int start, int maxSolutions) {
         int i = findEmptyCell(start);
         if (i == ALL_CELLS_TAKEN) {
-            boolean acceptable = isAcceptable();
-            if (acceptable) {
+            if (isAcceptable()) {
                 solutions.add(toString());
             }
-
-            return acceptable;
+            return solutions.size() >= maxSolutions;
         }
 
         for (int j = 0; j < DIM; j++) {
             fields[i].setValue((char) ('1' + j));
-            if (isAcceptable(i) && solve(solutions, i)) {
+            if (isAcceptable(i) && collectSolutions(solutions, i, maxSolutions)) {
                 return true;
             }
         }
 
         fields[i].setValue(' ');
-
         return false;
     }
 

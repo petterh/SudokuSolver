@@ -7,7 +7,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
-import com.google.android.gms.tasks.Task;
+import com.google.android.gms.tasks.Tasks;
 import com.google.mlkit.vision.common.InputImage;
 import com.google.mlkit.vision.text.Text;
 import com.google.mlkit.vision.text.TextRecognition;
@@ -23,8 +23,8 @@ import java.util.concurrent.Executor;
  * OCR a photo of a Sudoku grid into the 81-character board format used by {@link Board}
  * (digits {@code '1'}–{@code '9'} or space).
  *
- * <p>Prefers an OpenCV board extract (perspective-warped square). Digits are then mapped
- * onto a fixed 9×9 grid covering that square, so outside page noise never enters OCR.
+ * <p>Prefers an OpenCV board extract (perspective-warped square), then reads each cell
+ * crop individually. Falls back to full-frame digit clustering when cell OCR finds nothing.
  */
 public final class SudokuBoardRecognizer {
 
@@ -68,52 +68,233 @@ public final class SudokuBoardRecognizer {
             TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
 
     public void recognize(@NonNull Bitmap bitmap, @NonNull Executor executor, @NonNull Callback callback) {
+        recognize(bitmap, executor, true, callback);
+    }
+
+    /**
+     * @param extractBoard when false, OCR {@code bitmap} as-is (already perspective-warped)
+     */
+    public void recognize(
+            @NonNull Bitmap bitmap,
+            @NonNull Executor executor,
+            boolean extractBoard,
+            @NonNull Callback callback) {
         executor.execute(() -> {
             Bitmap extracted = null;
             try {
-                extracted = SudokuBoardExtractor.extractBoard(bitmap);
-            } catch (RuntimeException e) {
+                if (extractBoard) {
+                    extracted = SudokuBoardExtractor.extractBoard(bitmap);
+                }
+                Bitmap ocrInput = extracted != null ? extracted : bitmap;
+                boolean treatAsWarped = extracted != null || !extractBoard;
+
+                Text text = Tasks.await(textRecognizer.process(InputImage.fromBitmap(ocrInput, 0)));
+                List<DigitHit> hits = filterCellSizedHits(
+                        collectDigitHits(text),
+                        ocrInput.getWidth(),
+                        ocrInput.getHeight());
+                String board = boardFromHits(hits);
+
+                // Per-cell crops can recover digits the full-frame pass missed; they must
+                // not override a confident full-frame placement (that caused regressions).
+                if (treatAsWarped) {
+                    String cellBoard = recognizeByCells(ocrInput);
+                    board = mergeBoardPreferPrimary(board, cellBoard);
+                }
+
+                if (countClues(board) == 0) {
+                    callback.onFailure(
+                            new IllegalStateException("No digits recognized in the photo"));
+                } else {
+                    callback.onSuccess(board);
+                }
+            } catch (Exception e) {
                 callback.onFailure(e);
-                return;
+            } finally {
+                if (extracted != null && !extracted.isRecycled()) {
+                    extracted.recycle();
+                }
             }
-
-            final boolean recycleExtracted = extracted != null;
-            final Bitmap ocrInput = recycleExtracted ? extracted : bitmap;
-            final boolean useFullFrameMapping = recycleExtracted;
-
-            processBitmap(ocrInput)
-                    .addOnSuccessListener(executor, text -> {
-                        try {
-                            List<DigitHit> hits = collectDigitHits(text);
-                            String board = useFullFrameMapping
-                                    ? boardFromHitsFullFrame(
-                                            hits, ocrInput.getWidth(), ocrInput.getHeight())
-                                    : boardFromHits(hits);
-                            if (countClues(board) == 0) {
-                                callback.onFailure(
-                                        new IllegalStateException("No digits recognized in the photo"));
-                            } else {
-                                callback.onSuccess(board);
-                            }
-                        } catch (RuntimeException e) {
-                            callback.onFailure(e);
-                        } finally {
-                            if (recycleExtracted && !ocrInput.isRecycled()) {
-                                ocrInput.recycle();
-                            }
-                        }
-                    })
-                    .addOnFailureListener(executor, error -> {
-                        if (recycleExtracted && !ocrInput.isRecycled()) {
-                            ocrInput.recycle();
-                        }
-                        callback.onFailure(error);
-                    });
         });
     }
 
-    private Task<Text> processBitmap(@NonNull Bitmap bitmap) {
-        return textRecognizer.process(InputImage.fromBitmap(bitmap, 0));
+    /**
+     * Keep {@code primary} digits; fill blanks from {@code secondary} only when the
+     * fill does not duplicate a digit already present in that row, column, or box.
+     */
+    @VisibleForTesting
+    @NonNull
+    static String mergeBoardPreferPrimary(@NonNull String primary, @NonNull String secondary) {
+        char[] merged = primary.toCharArray();
+        int n = Math.min(merged.length, secondary.length());
+        for (int i = 0; i < n; i++) {
+            if (merged[i] != ' ') {
+                continue;
+            }
+            char extra = secondary.charAt(i);
+            if (extra < '1' || extra > '9') {
+                continue;
+            }
+            if (!digitConflicts(merged, i, extra)) {
+                merged[i] = extra;
+            }
+        }
+        return new String(merged);
+    }
+
+    /** True if {@code digit} already appears in the same row, column, or box. */
+    @VisibleForTesting
+    static boolean digitConflicts(@NonNull char[] board, int index, char digit) {
+        int row = index / Board.DIM;
+        int col = index % Board.DIM;
+        for (int c = 0; c < Board.DIM; c++) {
+            if (board[row * Board.DIM + c] == digit) {
+                return true;
+            }
+        }
+        for (int r = 0; r < Board.DIM; r++) {
+            if (board[r * Board.DIM + col] == digit) {
+                return true;
+            }
+        }
+        int boxRow = (row / 3) * 3;
+        int boxCol = (col / 3) * 3;
+        for (int r = boxRow; r < boxRow + 3; r++) {
+            for (int c = boxCol; c < boxCol + 3; c++) {
+                if (board[r * Board.DIM + c] == digit) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * OCR each of the 81 cells on a perspective-warped square.
+     * Blank-looking crops are skipped to avoid mistaking grid noise for digits.
+     */
+    @NonNull
+    private String recognizeByCells(@NonNull Bitmap warped) throws Exception {
+        char[] cells = new char[Board.DIM * Board.DIM];
+        Arrays.fill(cells, ' ');
+        int width = warped.getWidth();
+        int height = warped.getHeight();
+        float cellW = width / (float) Board.DIM;
+        float cellH = height / (float) Board.DIM;
+        // Heavier top inset avoids the digit from the cell above bleeding into this crop
+        // (e.g. the stem of a 2 read as 1 in the empty cell beneath it).
+        float insetX = cellW * 0.22f;
+        float insetTop = cellH * 0.30f;
+        float insetBottom = cellH * 0.20f;
+
+        for (int row = 0; row < Board.DIM; row++) {
+            for (int col = 0; col < Board.DIM; col++) {
+                int left = Math.max(0, Math.round(col * cellW + insetX));
+                int top = Math.max(0, Math.round(row * cellH + insetTop));
+                int right = Math.min(width, Math.round((col + 1) * cellW - insetX));
+                int bottom = Math.min(height, Math.round((row + 1) * cellH - insetBottom));
+                int cropW = right - left;
+                int cropH = bottom - top;
+                if (cropW < 4 || cropH < 4) {
+                    continue;
+                }
+                Bitmap cell = Bitmap.createBitmap(warped, left, top, cropW, cropH);
+                try {
+                    if (isMostlyBlank(cell)) {
+                        continue;
+                    }
+                    Text text = Tasks.await(textRecognizer.process(InputImage.fromBitmap(cell, 0)));
+                    Character digit = singleDigitFromCellText(text);
+                    if (digit != null) {
+                        cells[row * Board.DIM + col] = digit;
+                    }
+                } finally {
+                    cell.recycle();
+                }
+            }
+        }
+        return new String(cells);
+    }
+
+    /** True when the crop has very little dark ink (empty Sudoku cell). */
+    @VisibleForTesting
+    static boolean isMostlyBlank(@NonNull Bitmap bitmap) {
+        int width = bitmap.getWidth();
+        int height = bitmap.getHeight();
+        if (width <= 0 || height <= 0) {
+            return true;
+        }
+        int step = Math.max(1, Math.min(width, height) / 16);
+        int dark = 0;
+        int total = 0;
+        for (int y = 0; y < height; y += step) {
+            for (int x = 0; x < width; x += step) {
+                int pixel = bitmap.getPixel(x, y);
+                int lum = ((pixel >> 16) & 0xff) + ((pixel >> 8) & 0xff) + (pixel & 0xff);
+                if (lum < 3 * 140) {
+                    dark++;
+                }
+                total++;
+            }
+        }
+        // Require clearer ink than a faint bleed / grid fragment (~10% dark samples).
+        return total == 0 || dark * 10 < total;
+    }
+
+    /**
+     * Accept a cell only when OCR yields exactly one real digit character.
+     * Letter confusions ({@code l}/{@code I}/{@code |}) are ignored here — they often
+     * come from grid lines or ink bleed and caused spurious 1s under digits above.
+     */
+    @VisibleForTesting
+    @Nullable
+    static Character singleDigitFromCellText(@NonNull Text text) {
+        List<Character> digits = new ArrayList<>(2);
+        for (Text.TextBlock block : text.getTextBlocks()) {
+            for (Text.Line line : block.getLines()) {
+                for (Text.Element element : line.getElements()) {
+                    List<? extends Text.Symbol> symbols = element.getSymbols();
+                    if (symbols != null && !symbols.isEmpty()) {
+                        for (Text.Symbol symbol : symbols) {
+                            Character digit = normalizeStrictDigit(symbol.getText());
+                            if (digit != null) {
+                                digits.add(digit);
+                            }
+                        }
+                    } else {
+                        Character digit = normalizeStrictDigit(element.getText());
+                        if (digit != null) {
+                            digits.add(digit);
+                        }
+                    }
+                }
+            }
+        }
+        if (digits.size() != 1) {
+            return null;
+        }
+        return digits.get(0);
+    }
+
+    @VisibleForTesting
+    @Nullable
+    static Character normalizeStrictDigit(@Nullable String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String trimmed = raw.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        char ch = trimmed.charAt(0);
+        if (ch >= '1' && ch <= '9') {
+            return ch;
+        }
+        int unicodeDigit = Character.digit(ch, 10);
+        if (unicodeDigit >= 1 && unicodeDigit <= 9) {
+            return (char) ('0' + unicodeDigit);
+        }
+        return null;
     }
 
     public void close() {
@@ -127,18 +308,20 @@ public final class SudokuBoardRecognizer {
     }
 
     /**
-     * Map digits using the full image as the Sudoku square (after perspective warp).
+     * Map digits using the full image as the Sudoku square. Prefer {@link #boardFromHits}
+     * after a warp — full-frame binning is sensitive to border padding.
      */
     @VisibleForTesting
     @NonNull
     static String boardFromHitsFullFrame(@NonNull List<DigitHit> hits, int width, int height) {
-        float insetX = width / (Board.DIM * 20f);
-        float insetY = height / (Board.DIM * 20f);
+        float insetX = width / (Board.DIM * 12f);
+        float insetY = height / (Board.DIM * 12f);
         return mapHitsToBoard(hits, insetX, insetY, width - insetX, height - insetY);
     }
 
     /**
-     * Fallback when board extraction fails: fit the grid to the digit cluster.
+     * Fit the 9×9 grid to the digit cluster (with half-cell padding).
+     * Works for warped boards and for the no-extract fallback.
      */
     @VisibleForTesting
     @NonNull
@@ -149,11 +332,12 @@ public final class SudokuBoardRecognizer {
             return new String(empty);
         }
 
+        List<DigitHit> clustered = discardSpatialOutliers(hits);
         float minX = Float.MAX_VALUE;
         float maxX = -Float.MAX_VALUE;
         float minY = Float.MAX_VALUE;
         float maxY = -Float.MAX_VALUE;
-        for (DigitHit hit : hits) {
+        for (DigitHit hit : clustered) {
             minX = Math.min(minX, hit.centerX);
             maxX = Math.max(maxX, hit.centerX);
             minY = Math.min(minY, hit.centerY);
@@ -162,9 +346,69 @@ public final class SudokuBoardRecognizer {
 
         float width = Math.max(maxX - minX, 1f);
         float height = Math.max(maxY - minY, 1f);
+        // Half a cell so centers on the rim still land in columns 0 / 8.
         float padX = width / (Board.DIM * 2f);
         float padY = height / (Board.DIM * 2f);
-        return mapHitsToBoard(hits, minX - padX, minY - padY, maxX + padX, maxY + padY);
+        return mapHitsToBoard(clustered, minX - padX, minY - padY, maxX + padX, maxY + padY);
+    }
+
+    /**
+     * Keep glyphs whose box is roughly a Sudoku cell digit; drop titles, page numbers, and noise.
+     */
+    @VisibleForTesting
+    @NonNull
+    static List<DigitHit> filterCellSizedHits(
+            @NonNull List<DigitHit> hits, int imageWidth, int imageHeight) {
+        if (hits.isEmpty() || imageWidth <= 0 || imageHeight <= 0) {
+            return hits;
+        }
+        float cell = Math.min(imageWidth, imageHeight) / (float) Board.DIM;
+        float minArea = (cell * 0.10f) * (cell * 0.10f);
+        float maxArea = (cell * 1.20f) * (cell * 1.20f);
+        List<DigitHit> filtered = new ArrayList<>(hits.size());
+        for (DigitHit hit : hits) {
+            if (hit.area >= minArea && hit.area <= maxArea) {
+                filtered.add(hit);
+            }
+        }
+        return filtered.isEmpty() ? hits : filtered;
+    }
+
+    /**
+     * Drop digits far from the main cluster (margin numbers outside the puzzle).
+     */
+    @VisibleForTesting
+    @NonNull
+    static List<DigitHit> discardSpatialOutliers(@NonNull List<DigitHit> hits) {
+        if (hits.size() < 6) {
+            return hits;
+        }
+        float cx = 0f;
+        float cy = 0f;
+        for (DigitHit hit : hits) {
+            cx += hit.centerX;
+            cy += hit.centerY;
+        }
+        cx /= hits.size();
+        cy /= hits.size();
+
+        float[] distSq = new float[hits.size()];
+        for (int i = 0; i < hits.size(); i++) {
+            float dx = hits.get(i).centerX - cx;
+            float dy = hits.get(i).centerY - cy;
+            distSq[i] = dx * dx + dy * dy;
+        }
+        float[] sorted = distSq.clone();
+        Arrays.sort(sorted);
+        float cutoff = sorted[(int) (sorted.length * 0.85f)] * 2.25f;
+
+        List<DigitHit> kept = new ArrayList<>(hits.size());
+        for (int i = 0; i < hits.size(); i++) {
+            if (distSq[i] <= cutoff) {
+                kept.add(hits.get(i));
+            }
+        }
+        return kept.size() >= 4 ? kept : hits;
     }
 
     @NonNull

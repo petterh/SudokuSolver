@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GridLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:alignmentMode="alignBounds"
+    android:columnCount="3"
+    android:padding="12dp"
+    android:useDefaultMargins="true">
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/digit_1"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_columnWeight="1"
+        android:text="@string/digit_1" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/digit_2"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_columnWeight="1"
+        android:text="@string/digit_2" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/digit_3"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_columnWeight="1"
+        android:text="@string/digit_3" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/digit_4"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_columnWeight="1"
+        android:text="@string/digit_4" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/digit_5"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_columnWeight="1"
+        android:text="@string/digit_5" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/digit_6"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_columnWeight="1"
+        android:text="@string/digit_6" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/digit_7"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_columnWeight="1"
+        android:text="@string/digit_7" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/digit_8"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_columnWeight="1"
+        android:text="@string/digit_8" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/digit_9"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_columnWeight="1"
+        android:text="@string/digit_9" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/digit_clear"
+        style="@style/Widget.MaterialComponents.Button.TextButton"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_columnSpan="3"
+        android:layout_columnWeight="1"
+        android:text="@string/digit_clear" />
+</GridLayout>

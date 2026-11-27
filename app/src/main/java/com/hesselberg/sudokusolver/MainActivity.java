@@ -1,10 +1,12 @@
 package com.hesselberg.sudokusolver;
 
 import android.Manifest;
+import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.graphics.Matrix;
+import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
@@ -20,17 +22,14 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
-import androidx.core.content.FileProvider;
-import androidx.exifinterface.media.ExifInterface;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.hesselberg.sudokusolver.databinding.ActivityMainBinding;
 
 import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -38,30 +37,18 @@ import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity {
 
-    private static final String TEST_BOARD =
-            "     3 18" +
-            "6     425" +
-            "   5     " +
-            "  2 3   4" +
-            " 91  8 6 " +
-            "         " +
-            "     463 " +
-            "95   2   " +
-            "2       1";
-
-    private static final int CAPTURE_MAX_EDGE_PX = 1600;
+    private static final String STATE_BOARD = "state_board";
+    private static final String STATE_CLUES = "state_clues";
 
     private ActivityMainBinding binding;
     private final ExecutorService backgroundExecutor = Executors.newSingleThreadExecutor();
     private final SudokuBoardRecognizer boardRecognizer = new SudokuBoardRecognizer();
 
     /** Puzzle currently shown / solved. */
-    private String currentBoard = SampleBoards.SUDOKU_SAMPLE;
+    private String currentBoard = SampleBoards.EMPTY;
     /** True for cells treated as given clues (shown bold). */
     private final boolean[] clueCells = new boolean[Board.DIM * Board.DIM];
-
-    private Uri captureUri;
-    private File captureFile;
+    private final BoardHistory boardHistory = new BoardHistory();
 
     private final ActivityResultLauncher<String> requestCameraPermission =
             registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
@@ -72,13 +59,40 @@ public class MainActivity extends AppCompatActivity {
                 }
             });
 
-    private final ActivityResultLauncher<Uri> takePicture =
-            registerForActivityResult(new ActivityResultContracts.TakePicture(), success -> {
-                if (!success || captureUri == null) {
+    private final ActivityResultLauncher<Intent> captureBoard =
+            registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+                if (result.getResultCode() != RESULT_OK || result.getData() == null) {
                     return;
                 }
-                Bitmap bitmap = loadCaptureBitmap(captureUri);
-                deleteCaptureFile();
+                Uri uri = result.getData().getData();
+                if (uri == null) {
+                    String uriString = result.getData().getStringExtra(CaptureActivity.EXTRA_PHOTO_URI);
+                    if (uriString != null) {
+                        uri = Uri.parse(uriString);
+                    }
+                }
+                if (uri == null) {
+                    Toast.makeText(this, R.string.capture_failed, Toast.LENGTH_LONG).show();
+                    return;
+                }
+                String path = result.getData().getStringExtra(CaptureActivity.EXTRA_PHOTO_PATH);
+                RectF frame = readCaptureFrame(result.getData());
+                Bitmap bitmap = CaptureImageLoader.load(getContentResolver(), uri, frame);
+                deleteCaptureFile(path);
+                if (bitmap != null) {
+                    showCaptureConfirmDialog(bitmap);
+                } else {
+                    Toast.makeText(this, R.string.capture_failed, Toast.LENGTH_LONG).show();
+                }
+            });
+
+    private final ActivityResultLauncher<String> pickGalleryImage =
+            registerForActivityResult(new ActivityResultContracts.GetContent(), uri -> {
+                if (uri == null) {
+                    return;
+                }
+                // Gallery photos have no framing overlay; OpenCV isolates the board.
+                Bitmap bitmap = CaptureImageLoader.load(getContentResolver(), uri, null);
                 if (bitmap != null) {
                     showCaptureConfirmDialog(bitmap);
                 } else {
@@ -92,28 +106,167 @@ public class MainActivity extends AppCompatActivity {
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
         binding.btnCapture.setOnClickListener(v -> startCapture());
+        binding.btnClear.setOnClickListener(v -> confirmClearBoard());
         binding.btnSolve.setOnClickListener(v -> solveBoard());
+        binding.btnUndo.setOnClickListener(v -> undoBoard());
+        binding.btnRedo.setOnClickListener(v -> redoBoard());
         // Warm up native OpenCV so the first capture does not pay load cost mid-OCR.
         backgroundExecutor.execute(SudokuBoardExtractor::ensureOpenCvLoaded);
 
-        markCluesFromBoard(currentBoard);
+        if (savedInstanceState != null) {
+            restoreBoardState(savedInstanceState);
+        } else if (!restorePersistedBoard()) {
+            markCluesFromBoard(currentBoard);
+        }
         List<TextView> textViews = getTextViews();
         int count = 0;
         for (TextView textView : textViews) {
             final int stringIndex = Board.convertToStringIndex(count++);
-            textView.setOnClickListener(v -> editCell(stringIndex));
+            textView.setOnClickListener(v -> onCellClick(stringIndex));
+            textView.setOnLongClickListener(v -> {
+                onCellLongClick(stringIndex);
+                return true;
+            });
         }
+        showBoard(currentBoard);
+        updateHistoryButtons();
+    }
+
+    @Override
+    protected void onSaveInstanceState(@NonNull Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putString(STATE_BOARD, currentBoard);
+        outState.putBooleanArray(STATE_CLUES, clueCells);
+    }
+
+    @Override
+    protected void onPause() {
+        persistBoard();
+        super.onPause();
     }
 
     @Override
     protected void onDestroy() {
         backgroundExecutor.shutdownNow();
         boardRecognizer.close();
-        deleteCaptureFile();
         super.onDestroy();
     }
 
+    private void restoreBoardState(@NonNull Bundle savedInstanceState) {
+        String board = savedInstanceState.getString(STATE_BOARD);
+        boolean[] clues = savedInstanceState.getBooleanArray(STATE_CLUES);
+        if (board != null && board.length() == Board.DIM * Board.DIM) {
+            currentBoard = board;
+        }
+        if (clues != null && clues.length == clueCells.length) {
+            System.arraycopy(clues, 0, clueCells, 0, clueCells.length);
+        } else {
+            markCluesFromBoard(currentBoard);
+        }
+    }
+
+    /** @return true when a persisted board was loaded */
+    private boolean restorePersistedBoard() {
+        SharedPreferences prefs = boardPrefs();
+        String board = BoardStore.loadBoard(prefs);
+        if (board == null) {
+            return false;
+        }
+        currentBoard = board;
+        boolean[] clues = BoardStore.loadClues(prefs);
+        if (clues != null) {
+            System.arraycopy(clues, 0, clueCells, 0, clueCells.length);
+        } else {
+            markCluesFromBoard(currentBoard);
+        }
+        return true;
+    }
+
+    private void persistBoard() {
+        BoardStore.save(boardPrefs(), currentBoard, clueCells);
+    }
+
+    @NonNull
+    private SharedPreferences boardPrefs() {
+        return getSharedPreferences(BoardStore.PREFS_NAME, MODE_PRIVATE);
+    }
+
+    private void confirmClearBoard() {
+        new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.clear_confirm_title)
+                .setMessage(R.string.clear_confirm_message)
+                .setPositiveButton(R.string.clear, (dialog, which) -> clearBoard())
+                .setNegativeButton(R.string.capture_cancel, null)
+                .show();
+    }
+
+    private void clearBoard() {
+        pushHistory();
+        currentBoard = SampleBoards.EMPTY;
+        markCluesFromBoard(currentBoard);
+        BoardStore.clear(boardPrefs());
+        showBoard(currentBoard);
+        updateHistoryButtons();
+    }
+
+    private void undoBoard() {
+        BoardHistory.Snapshot snapshot = boardHistory.undo(currentBoard, clueCells);
+        if (snapshot == null) {
+            Toast.makeText(this, R.string.undo_empty, Toast.LENGTH_SHORT).show();
+            updateHistoryButtons();
+            return;
+        }
+        applySnapshot(snapshot);
+    }
+
+    private void redoBoard() {
+        BoardHistory.Snapshot snapshot = boardHistory.redo(currentBoard, clueCells);
+        if (snapshot == null) {
+            Toast.makeText(this, R.string.redo_empty, Toast.LENGTH_SHORT).show();
+            updateHistoryButtons();
+            return;
+        }
+        applySnapshot(snapshot);
+    }
+
+    private void applySnapshot(@NonNull BoardHistory.Snapshot snapshot) {
+        currentBoard = snapshot.board;
+        System.arraycopy(snapshot.clues, 0, clueCells, 0, clueCells.length);
+        showBoard(currentBoard);
+        persistBoard();
+        updateHistoryButtons();
+    }
+
+    private void pushHistory() {
+        boardHistory.push(currentBoard, clueCells);
+        updateHistoryButtons();
+    }
+
+    private void updateHistoryButtons() {
+        binding.btnUndo.setEnabled(boardHistory.canUndo());
+        binding.btnRedo.setEnabled(boardHistory.canRedo());
+    }
+
     private void startCapture() {
+        new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.capture_source_title)
+                .setItems(
+                        new CharSequence[]{
+                                getString(R.string.capture_source_camera),
+                                getString(R.string.capture_source_gallery)
+                        },
+                        (dialog, which) -> {
+                            if (which == 0) {
+                                startCameraCapture();
+                            } else {
+                                launchGallery();
+                            }
+                        })
+                .setNegativeButton(R.string.capture_cancel, null)
+                .show();
+    }
+
+    private void startCameraCapture() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
                 == PackageManager.PERMISSION_GRANTED) {
             launchCamera();
@@ -123,181 +276,150 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void launchCamera() {
-        try {
-            captureUri = createCaptureUri();
-            takePicture.launch(captureUri);
-        } catch (Exception e) {
-            Toast.makeText(this, R.string.camera_unavailable, Toast.LENGTH_LONG).show();
-        }
+        captureBoard.launch(new Intent(this, CaptureActivity.class));
     }
 
-    @NonNull
-    private Uri createCaptureUri() throws IOException {
-        File dir = new File(getCacheDir(), "capture");
-        if (!dir.exists() && !dir.mkdirs()) {
-            throw new IOException("Unable to create capture directory");
-        }
-        captureFile = File.createTempFile("sudoku_", ".jpg", dir);
-        return FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", captureFile);
+    private void launchGallery() {
+        pickGalleryImage.launch("image/*");
     }
 
     @Nullable
-    private Bitmap loadCaptureBitmap(@NonNull Uri uri) {
-        try {
-            // Camera JPEGs often store orientation in EXIF; BitmapFactory ignores it.
-            // TakePicturePreview returned an upright bitmap, which is why OCR was better before.
-            int orientation = ExifInterface.ORIENTATION_NORMAL;
-            try (InputStream in = getContentResolver().openInputStream(uri)) {
-                if (in != null) {
-                    ExifInterface exif = new ExifInterface(in);
-                    orientation = exif.getAttributeInt(
-                            ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
-                }
-            }
-
-            BitmapFactory.Options bounds = new BitmapFactory.Options();
-            bounds.inJustDecodeBounds = true;
-            try (InputStream in = getContentResolver().openInputStream(uri)) {
-                if (in == null) {
-                    return null;
-                }
-                BitmapFactory.decodeStream(in, null, bounds);
-            }
-
-            BitmapFactory.Options opts = new BitmapFactory.Options();
-            opts.inSampleSize = calculateInSampleSize(bounds, CAPTURE_MAX_EDGE_PX, CAPTURE_MAX_EDGE_PX);
-            opts.inPreferredConfig = Bitmap.Config.ARGB_8888;
-            Bitmap decoded;
-            try (InputStream in = getContentResolver().openInputStream(uri)) {
-                if (in == null) {
-                    return null;
-                }
-                decoded = BitmapFactory.decodeStream(in, null, opts);
-            }
-            if (decoded == null) {
-                return null;
-            }
-            return applyExifOrientation(decoded, orientation);
-        } catch (IOException e) {
+    private static RectF readCaptureFrame(@Nullable Intent data) {
+        if (data == null
+                || !data.hasExtra(CaptureActivity.EXTRA_FRAME_LEFT)
+                || !data.hasExtra(CaptureActivity.EXTRA_FRAME_TOP)
+                || !data.hasExtra(CaptureActivity.EXTRA_FRAME_RIGHT)
+                || !data.hasExtra(CaptureActivity.EXTRA_FRAME_BOTTOM)) {
             return null;
         }
+        return new RectF(
+                data.getFloatExtra(CaptureActivity.EXTRA_FRAME_LEFT, 0f),
+                data.getFloatExtra(CaptureActivity.EXTRA_FRAME_TOP, 0f),
+                data.getFloatExtra(CaptureActivity.EXTRA_FRAME_RIGHT, 1f),
+                data.getFloatExtra(CaptureActivity.EXTRA_FRAME_BOTTOM, 1f));
     }
 
-    @NonNull
-    private static Bitmap applyExifOrientation(@NonNull Bitmap bitmap, int orientation) {
-        int rotationDegrees = 0;
-        boolean flipX = false;
-        boolean flipY = false;
-        switch (orientation) {
-            case ExifInterface.ORIENTATION_FLIP_HORIZONTAL:
-                flipX = true;
-                break;
-            case ExifInterface.ORIENTATION_ROTATE_180:
-                rotationDegrees = 180;
-                break;
-            case ExifInterface.ORIENTATION_FLIP_VERTICAL:
-                flipY = true;
-                break;
-            case ExifInterface.ORIENTATION_TRANSPOSE:
-                rotationDegrees = 90;
-                flipX = true;
-                break;
-            case ExifInterface.ORIENTATION_ROTATE_90:
-                rotationDegrees = 90;
-                break;
-            case ExifInterface.ORIENTATION_TRANSVERSE:
-                rotationDegrees = 270;
-                flipX = true;
-                break;
-            case ExifInterface.ORIENTATION_ROTATE_270:
-                rotationDegrees = 270;
-                break;
-            case ExifInterface.ORIENTATION_NORMAL:
-            case ExifInterface.ORIENTATION_UNDEFINED:
-            default:
-                return bitmap;
+    private void deleteCaptureFile(@Nullable String path) {
+        if (path == null || path.isEmpty()) {
+            return;
         }
-
-        Matrix matrix = new Matrix();
-        matrix.postScale(flipX ? -1f : 1f, flipY ? -1f : 1f);
-        if (rotationDegrees != 0) {
-            matrix.postRotate(rotationDegrees);
-        }
-        Bitmap oriented = Bitmap.createBitmap(
-                bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
-        if (oriented != bitmap) {
-            bitmap.recycle();
-        }
-        return oriented;
+        //noinspection ResultOfMethodCallIgnored
+        new File(path).delete();
     }
 
-    private static int calculateInSampleSize(
-            @NonNull BitmapFactory.Options options, int maxWidth, int maxHeight) {
-        int height = options.outHeight;
-        int width = options.outWidth;
-        int inSampleSize = 1;
-        while ((height / inSampleSize) > maxHeight || (width / inSampleSize) > maxWidth) {
-            inSampleSize *= 2;
-        }
-        return Math.max(1, inSampleSize);
-    }
-
-    private void deleteCaptureFile() {
-        if (captureFile != null) {
-            //noinspection ResultOfMethodCallIgnored
-            captureFile.delete();
-            captureFile = null;
-        }
-        captureUri = null;
-    }
-
-    private void showCaptureConfirmDialog(@NonNull Bitmap bitmap) {
+    private void showCaptureConfirmDialog(@NonNull Bitmap sourceBitmap) {
         View content = LayoutInflater.from(this).inflate(R.layout.dialog_capture_confirm, null, false);
         ImageView preview = content.findViewById(R.id.capture_preview);
-        preview.setImageBitmap(bitmap);
+        TextView status = content.findViewById(R.id.capture_preview_status);
+        preview.setImageBitmap(sourceBitmap);
 
-        new MaterialAlertDialogBuilder(this)
+        // Holds the bitmap OCR should read; swapped to the warp when extract succeeds.
+        final Bitmap[] ocrBitmap = {sourceBitmap};
+        final boolean[] ocrAlreadyWarped = {false};
+        final Bitmap[] warpedBitmap = {null};
+        final boolean[] confirmed = {false};
+
+        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.capture_preview_title)
                 .setView(content)
-                .setPositiveButton(R.string.capture_confirm, (dialog, which) -> recognizeCapturedBoard(bitmap))
-                .setNeutralButton(R.string.capture_retake, (dialog, which) -> launchCamera())
+                .setPositiveButton(R.string.capture_confirm, (d, which) -> {
+                    confirmed[0] = true;
+                    recognizeCapturedBoard(ocrBitmap[0], !ocrAlreadyWarped[0]);
+                })
+                .setNeutralButton(R.string.capture_retake, (d, which) -> startCapture())
                 .setNegativeButton(R.string.capture_cancel, null)
-                .show();
-    }
-
-    private void recognizeCapturedBoard(@NonNull Bitmap bitmap) {
-        enableButtons(false);
-        Toast.makeText(this, R.string.recognizing_board, Toast.LENGTH_SHORT).show();
-
-        boardRecognizer.recognize(bitmap, backgroundExecutor, new SudokuBoardRecognizer.Callback() {
-            @Override
-            public void onSuccess(@NonNull String board) {
-                runOnUiThread(() -> {
-                    if (isFinishing() || isDestroyed()) {
-                        return;
-                    }
-                    applyRecognizedBoard(board);
-                    enableButtons(true);
-                });
+                .create();
+        dialog.setOnDismissListener(d -> {
+            // Confirmed path keeps the warp for OCR; cancel/retake can free it.
+            if (!confirmed[0]) {
+                recycleBitmap(warpedBitmap[0]);
             }
+        });
+        dialog.show();
 
-            @Override
-            public void onFailure(@NonNull Exception error) {
-                runOnUiThread(() -> {
-                    if (isFinishing() || isDestroyed()) {
-                        return;
-                    }
-                    Toast.makeText(MainActivity.this, R.string.recognition_failed, Toast.LENGTH_LONG).show();
-                    enableButtons(true);
-                });
+        backgroundExecutor.execute(() -> {
+            Bitmap extracted = null;
+            try {
+                extracted = SudokuBoardExtractor.extractBoard(sourceBitmap);
+            } catch (RuntimeException ignored) {
+                // Keep the original photo preview; OCR will try extract again.
             }
+            final Bitmap warped = extracted;
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed() || !dialog.isShowing()) {
+                    recycleBitmap(warped);
+                    return;
+                }
+                if (warped == null) {
+                    status.setVisibility(View.GONE);
+                    return;
+                }
+                warpedBitmap[0] = warped;
+                ocrBitmap[0] = warped;
+                ocrAlreadyWarped[0] = true;
+                preview.setImageBitmap(warped);
+                status.setVisibility(View.GONE);
+                dialog.setTitle(R.string.capture_preview_board_title);
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setText(R.string.capture_confirm_board);
+            });
         });
     }
 
+    private void recognizeCapturedBoard(@NonNull Bitmap bitmap, boolean extractBoard) {
+        enableButtons(false);
+        Toast.makeText(this, R.string.recognizing_board, Toast.LENGTH_SHORT).show();
+
+        boardRecognizer.recognize(
+                bitmap,
+                backgroundExecutor,
+                extractBoard,
+                new SudokuBoardRecognizer.Callback() {
+                    @Override
+                    public void onSuccess(@NonNull String board) {
+                        runOnUiThread(() -> {
+                            if (!extractBoard) {
+                                recycleBitmap(bitmap);
+                            }
+                            if (isFinishing() || isDestroyed()) {
+                                return;
+                            }
+                            applyRecognizedBoard(board);
+                            enableButtons(true);
+                        });
+                    }
+
+                    @Override
+                    public void onFailure(@NonNull Exception error) {
+                        runOnUiThread(() -> {
+                            if (!extractBoard) {
+                                recycleBitmap(bitmap);
+                            }
+                            if (isFinishing() || isDestroyed()) {
+                                return;
+                            }
+                            Toast.makeText(
+                                            MainActivity.this,
+                                            R.string.recognition_failed,
+                                            Toast.LENGTH_LONG)
+                                    .show();
+                            enableButtons(true);
+                        });
+                    }
+                });
+    }
+
+    private static void recycleBitmap(@Nullable Bitmap bitmap) {
+        if (bitmap != null && !bitmap.isRecycled()) {
+            bitmap.recycle();
+        }
+    }
+
     private void applyRecognizedBoard(@NonNull String board) {
+        pushHistory();
         currentBoard = board;
         markCluesFromBoard(board);
         showBoard(currentBoard);
+        persistBoard();
 
         int clues = SudokuBoardRecognizer.countClues(board);
         Toast.makeText(this, getString(R.string.recognition_success, clues), Toast.LENGTH_SHORT).show();
@@ -307,29 +429,66 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /**
-     * Milestone 3: tap a cell to cycle blank → 1..9 → blank and update {@link #currentBoard}.
-     */
-    private void editCell(int stringIndex) {
-        char[] chars = currentBoard.toCharArray();
-        chars[stringIndex] = nextClueValue(chars[stringIndex]);
-        currentBoard = new String(chars);
-        clueCells[stringIndex] = chars[stringIndex] != ' ';
+    private void onCellClick(int stringIndex) {
+        if (clueCells[stringIndex]) {
+            Toast.makeText(this, R.string.edit_clue_locked, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        // Non-clue taps are user fills (not bold given clues).
+        editCell(stringIndex, false);
+    }
 
-        List<TextView> textViews = getTextViews();
-        int textViewIndex = Board.convertToTextViewIndex(stringIndex);
-        applyCellVisual(textViews.get(textViewIndex), chars[stringIndex], clueCells[stringIndex]);
+    private void onCellLongClick(int stringIndex) {
+        // Long-press edits given clues (OCR fixes) or turns a fill into a clue.
+        editCell(stringIndex, true);
+    }
+
+    /** Opens a digit keypad. {@code asClue} keeps the cell bold when a digit is set. */
+    private void editCell(int stringIndex, boolean asClue) {
+        View content = LayoutInflater.from(this).inflate(R.layout.dialog_digit_keypad, null, false);
+        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.edit_cell_title)
+                .setView(content)
+                .setNegativeButton(R.string.capture_cancel, null);
+        final AlertDialog dialog = builder.create();
+
+        int[] digitIds = {
+                R.id.digit_1, R.id.digit_2, R.id.digit_3,
+                R.id.digit_4, R.id.digit_5, R.id.digit_6,
+                R.id.digit_7, R.id.digit_8, R.id.digit_9
+        };
+        for (int i = 0; i < digitIds.length; i++) {
+            final char digit = (char) ('1' + i);
+            content.findViewById(digitIds[i]).setOnClickListener(v -> {
+                setCellValue(stringIndex, digit, asClue);
+                dialog.dismiss();
+            });
+        }
+        content.findViewById(R.id.digit_clear).setOnClickListener(v -> {
+            setCellValue(stringIndex, ' ', false);
+            dialog.dismiss();
+        });
+        dialog.show();
+    }
+
+    private void setCellValue(int stringIndex, char value, boolean asClue) {
+        pushHistory();
+        currentBoard = withCellValue(currentBoard, stringIndex, value);
+        clueCells[stringIndex] = asClue && value >= '1' && value <= '9';
+        // Refresh all cells: fixing one conflict can clear others in the same unit.
+        showBoard(currentBoard);
+        persistBoard();
     }
 
     @VisibleForTesting
-    static char nextClueValue(char current) {
-        if (current < '1' || current > '9') {
-            return '1';
+    @NonNull
+    static String withCellValue(@NonNull String board, int stringIndex, char value) {
+        char[] chars = board.toCharArray();
+        if (stringIndex < 0 || stringIndex >= chars.length) {
+            return board;
         }
-        if (current == '9') {
-            return ' ';
-        }
-        return (char) (current + 1);
+        chars[stringIndex] = value;
+        return new String(chars);
     }
 
     private void markCluesFromBoard(@NonNull String board) {
@@ -339,28 +498,39 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void clearClueMarks() {
-        for (int i = 0; i < clueCells.length; i++) {
-            clueCells[i] = false;
-        }
-    }
-
     private void solveBoard() {
+        if (SudokuBoardRecognizer.countClues(currentBoard) == 0) {
+            Toast.makeText(this, R.string.solve_empty_board, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Board board = new Board(currentBoard);
+        if (!board.cluesAreConsistent()) {
+            Toast.makeText(this, R.string.solve_has_conflicts, Toast.LENGTH_SHORT).show();
+            return;
+        }
+
         enableButtons(false);
         final String boardToSolve = currentBoard;
         backgroundExecutor.execute(() -> {
-            List<String> solutions = new ArrayList<>(1);
-            new Board(boardToSolve).solve(solutions);
+            // Cap at 2 so we can warn when OCR left the puzzle underdetermined.
+            List<String> solutions = new ArrayList<>(2);
+            new Board(boardToSolve).solve(solutions, 2);
             runOnUiThread(() -> {
                 if (isFinishing() || isDestroyed()) {
                     return;
                 }
                 if (!solutions.isEmpty()) {
+                    pushHistory();
+                    // Keep clueCells as-is so given/edited clues stay bold after solving.
                     currentBoard = solutions.get(0);
-                    clearClueMarks();
                     showBoard(currentBoard);
+                    persistBoard();
+                    if (solutions.size() > 1) {
+                        Toast.makeText(this, R.string.solve_multiple_solutions, Toast.LENGTH_LONG)
+                                .show();
+                    }
                 } else {
-                    Toast.makeText(this, "No solution found", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, R.string.no_solution, Toast.LENGTH_SHORT).show();
                 }
                 enableButtons(true);
             });
@@ -390,25 +560,42 @@ public class MainActivity extends AppCompatActivity {
 
     private void enableButtons(boolean enable) {
         binding.btnCapture.setEnabled(enable);
+        binding.btnClear.setEnabled(enable);
         binding.btnSolve.setEnabled(enable);
+        binding.btnUndo.setEnabled(enable && boardHistory.canUndo());
+        binding.btnRedo.setEnabled(enable && boardHistory.canRedo());
     }
 
     private void showBoard(@NonNull String board) {
         List<TextView> textViews = getTextViews();
+        boolean[] conflicts = new Board(board).conflictingCells();
         for (int i = 0; i < Board.DIM * Board.DIM; i++) {
             int textViewIndex = Board.convertToTextViewIndex(i);
-            applyCellVisual(textViews.get(textViewIndex), board.charAt(i), clueCells[i]);
+            applyCellVisual(
+                    textViews.get(textViewIndex),
+                    board.charAt(i),
+                    clueCells[i],
+                    conflicts[i]);
         }
     }
 
-    private void applyCellVisual(@NonNull TextView textView, char value, boolean clue) {
+    private void applyCellVisual(
+            @NonNull TextView textView, char value, boolean clue, boolean conflict) {
         char[] ch = new char[]{value};
         textView.setText(ch, 0, 1);
+        // setTypeface can reset text color on some devices; apply color afterward.
         if (clue && value != ' ') {
-            textView.setTypeface(null, Typeface.BOLD);
-            textView.setTextColor(0xff000000);
+            textView.setTypeface(Typeface.DEFAULT_BOLD);
         } else {
-            textView.setTypeface(null, Typeface.NORMAL);
+            textView.setTypeface(Typeface.DEFAULT);
         }
+
+        boolean showConflict = conflict && value != ' ';
+        int colorRes = showConflict
+                ? R.color.cell_conflict
+                : (clue && value != ' ' ? R.color.cell_clue : R.color.cell_filled);
+        textView.setTextColor(ColorStateList.valueOf(ContextCompat.getColor(this, colorRes)));
+        textView.setBackgroundResource(
+                showConflict ? R.drawable.digit_border_conflict : R.drawable.digit_border);
     }
 }

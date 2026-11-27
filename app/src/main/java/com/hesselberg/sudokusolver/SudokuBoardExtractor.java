@@ -29,6 +29,9 @@ public final class SudokuBoardExtractor {
 
     private static final String TAG = "SudokuBoardExtractor";
     static final int WARPED_SIZE = 900;
+    private static final double MIN_SQUARE_QUALITY = 0.45;
+    private static final double[] APPROX_EPSILONS = {0.015, 0.02, 0.03, 0.04};
+    private static final int[] ADAPTIVE_BLOCK_SIZES = {11, 21, 31};
 
     private static boolean openCvReady;
 
@@ -57,47 +60,103 @@ public final class SudokuBoardExtractor {
 
         Mat rgba = new Mat();
         Mat gray = new Mat();
-        Mat blurred = new Mat();
-        Mat binary = new Mat();
-        Mat hierarchy = new Mat();
-        List<MatOfPoint> contours = new ArrayList<>();
         try {
             Utils.bitmapToMat(source, rgba);
             Imgproc.cvtColor(rgba, gray, Imgproc.COLOR_RGBA2GRAY);
-            Imgproc.GaussianBlur(gray, blurred, new Size(5, 5), 0);
-            Imgproc.adaptiveThreshold(
-                    blurred,
-                    binary,
-                    255,
-                    Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C,
-                    Imgproc.THRESH_BINARY_INV,
-                    11,
-                    2);
-            Mat kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(3, 3));
-            Imgproc.dilate(binary, binary, kernel);
-            kernel.release();
 
-            // LIST (not EXTERNAL) so we can choose among several board-sized quads on a page.
-            Imgproc.findContours(
-                    binary,
-                    contours,
-                    hierarchy,
-                    Imgproc.RETR_LIST,
-                    Imgproc.CHAIN_APPROX_SIMPLE);
-
-            Point[] quad = findBestBoardQuad(
-                    contours,
-                    source.getWidth(),
-                    source.getHeight());
+            Point[] quad = findBestBoardQuadAcrossStrategies(gray, source.getWidth(), source.getHeight());
             if (quad == null) {
+                Log.w(TAG, "No board quad found");
                 return null;
             }
             return warpBoard(rgba, quad);
         } finally {
             rgba.release();
             gray.release();
+        }
+    }
+
+    @Nullable
+    private static Point[] findBestBoardQuadAcrossStrategies(
+            @NonNull Mat gray, int imageWidth, int imageHeight) {
+        double bestScore = Double.NEGATIVE_INFINITY;
+        Point[] bestQuad = null;
+
+        Mat blurred = new Mat();
+        Mat binary = new Mat();
+        try {
+            Imgproc.GaussianBlur(gray, blurred, new Size(5, 5), 0);
+
+            for (int blockSize : ADAPTIVE_BLOCK_SIZES) {
+                Imgproc.adaptiveThreshold(
+                        blurred,
+                        binary,
+                        255,
+                        Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C,
+                        Imgproc.THRESH_BINARY_INV,
+                        blockSize,
+                        2);
+                strengthenBoardEdges(binary);
+                Point[] quad = bestQuadFromBinary(binary, imageWidth, imageHeight);
+                if (quad != null) {
+                    double area = polygonArea(quad);
+                    double score = scoreBoardCandidate(
+                            quad, area, imageWidth, imageHeight, squareQuality(quad));
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestQuad = quad;
+                    }
+                }
+            }
+
+            // Canny fallback helps when adaptive threshold merges the board into page noise.
+            Imgproc.Canny(blurred, binary, 50, 150);
+            strengthenBoardEdges(binary);
+            Point[] cannyQuad = bestQuadFromBinary(binary, imageWidth, imageHeight);
+            if (cannyQuad != null) {
+                double area = polygonArea(cannyQuad);
+                double score = scoreBoardCandidate(
+                        cannyQuad, area, imageWidth, imageHeight, squareQuality(cannyQuad));
+                if (score > bestScore) {
+                    bestQuad = cannyQuad;
+                }
+            }
+        } finally {
             blurred.release();
             binary.release();
+        }
+        return bestQuad;
+    }
+
+    private static void strengthenBoardEdges(@NonNull Mat binary) {
+        Mat kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(3, 3));
+        try {
+            Imgproc.dilate(binary, binary, kernel);
+            Imgproc.morphologyEx(binary, binary, Imgproc.MORPH_CLOSE, kernel);
+        } finally {
+            kernel.release();
+        }
+    }
+
+    private static double polygonArea(@NonNull Point[] quad) {
+        MatOfPoint2f mat = new MatOfPoint2f(quad);
+        try {
+            return Math.abs(Imgproc.contourArea(mat));
+        } finally {
+            mat.release();
+        }
+    }
+
+    @Nullable
+    private static Point[] bestQuadFromBinary(
+            @NonNull Mat binary, int imageWidth, int imageHeight) {
+        List<MatOfPoint> contours = new ArrayList<>();
+        Mat hierarchy = new Mat();
+        try {
+            Imgproc.findContours(
+                    binary, contours, hierarchy, Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_SIMPLE);
+            return findBestBoardQuad(contours, imageWidth, imageHeight);
+        } finally {
             hierarchy.release();
             for (MatOfPoint contour : contours) {
                 contour.release();
@@ -109,7 +168,8 @@ public final class SudokuBoardExtractor {
     private static Point[] findBestBoardQuad(
             @NonNull List<MatOfPoint> contours, int imageWidth, int imageHeight) {
         double imageArea = imageWidth * (double) imageHeight;
-        double minArea = imageArea * 0.08;
+        // Newspaper pages: primary puzzle is often a modest fraction of the tall frame.
+        double minArea = imageArea * 0.04;
         double bestScore = Double.NEGATIVE_INFINITY;
         Point[] bestQuad = null;
 
@@ -117,34 +177,37 @@ public final class SudokuBoardExtractor {
             MatOfPoint2f curve = new MatOfPoint2f(contour.toArray());
             try {
                 double peri = Imgproc.arcLength(curve, true);
-                MatOfPoint2f approx = new MatOfPoint2f();
-                try {
-                    Imgproc.approxPolyDP(curve, approx, 0.02 * peri, true);
-                    Point[] points = approx.toArray();
-                    MatOfPoint convexCheck = new MatOfPoint(points);
+                for (double epsilonFactor : APPROX_EPSILONS) {
+                    MatOfPoint2f approx = new MatOfPoint2f();
                     try {
-                        if (points.length != 4 || !Imgproc.isContourConvex(convexCheck)) {
+                        Imgproc.approxPolyDP(curve, approx, epsilonFactor * peri, true);
+                        Point[] points = approx.toArray();
+                        MatOfPoint convexCheck = new MatOfPoint(points);
+                        try {
+                            if (points.length != 4 || !Imgproc.isContourConvex(convexCheck)) {
+                                continue;
+                            }
+                        } finally {
+                            convexCheck.release();
+                        }
+                        double area = Math.abs(Imgproc.contourArea(approx));
+                        if (area < minArea) {
                             continue;
                         }
+                        Point[] ordered = orderQuadPoints(points);
+                        double quality = squareQuality(ordered);
+                        if (quality < MIN_SQUARE_QUALITY) {
+                            continue;
+                        }
+                        double score = scoreBoardCandidate(
+                                ordered, area, imageWidth, imageHeight, quality);
+                        if (score > bestScore) {
+                            bestScore = score;
+                            bestQuad = ordered;
+                        }
                     } finally {
-                        convexCheck.release();
+                        approx.release();
                     }
-                    double area = Math.abs(Imgproc.contourArea(approx));
-                    if (area < minArea) {
-                        continue;
-                    }
-                    Point[] ordered = orderQuadPoints(points);
-                    double squareQuality = squareQuality(ordered);
-                    if (squareQuality < 0.55) {
-                        continue;
-                    }
-                    double score = scoreBoardCandidate(ordered, area, imageWidth, imageHeight, squareQuality);
-                    if (score > bestScore) {
-                        bestScore = score;
-                        bestQuad = ordered;
-                    }
-                } finally {
-                    approx.release();
                 }
             } finally {
                 curve.release();
@@ -155,6 +218,8 @@ public final class SudokuBoardExtractor {
 
     /**
      * Prefer a centered, square board. Pure area ranking fails when the page has several grids.
+     * Near-full-frame quads (page/photo borders) and edge-hugging corners are heavily downranked
+     * so margin content left in the framing crop does not become the “board”.
      */
     @VisibleForTesting
     static double scoreBoardCandidate(
@@ -165,8 +230,20 @@ public final class SudokuBoardExtractor {
             double squareQuality) {
         double imageArea = imageWidth * (double) imageHeight;
         double areaRatio = area / imageArea;
-        // Huge near-full-frame quads are often page borders, not the intended puzzle.
-        double areaWeight = areaRatio > 0.82 ? areaRatio * 0.45 : areaRatio;
+        // Newspaper pages: primary puzzle is mid-sized; tiny solution thumbnails and
+        // near-full-page borders score poorly.
+        double areaWeight;
+        if (areaRatio > 0.88) {
+            areaWeight = areaRatio * 0.15;
+        } else if (areaRatio > 0.70) {
+            areaWeight = areaRatio * 0.35;
+        } else if (areaRatio >= 0.08 && areaRatio <= 0.55) {
+            areaWeight = areaRatio * 1.35;
+        } else if (areaRatio < 0.08) {
+            areaWeight = areaRatio * 0.45;
+        } else {
+            areaWeight = areaRatio;
+        }
 
         double cx = 0;
         double cy = 0;
@@ -181,12 +258,48 @@ public final class SudokuBoardExtractor {
         double maxDist = Math.hypot(imageWidth / 2.0, imageHeight / 2.0);
         double centerScore = 1.0 - Math.min(1.0, Math.hypot(dx, dy) / maxDist);
 
-        return areaWeight * (0.35 + 0.65 * squareQuality) * (0.40 + 0.60 * centerScore) * imageArea;
+        double borderPenalty = borderTouchPenalty(orderedQuad, imageWidth, imageHeight);
+
+        return areaWeight
+                * (0.35 + 0.65 * squareQuality)
+                * (0.40 + 0.60 * centerScore)
+                * borderPenalty
+                * imageArea;
+    }
+
+    /**
+     * Quads with several corners on the image edge are usually the photo/page border.
+     *
+     * @return 1 for a free-floating board, down toward ~0.25 when most corners hug the border
+     */
+    @VisibleForTesting
+    static double borderTouchPenalty(
+            @NonNull Point[] orderedQuad, int imageWidth, int imageHeight) {
+        double margin = Math.max(4.0, Math.min(imageWidth, imageHeight) * 0.02);
+        int touches = 0;
+        for (Point point : orderedQuad) {
+            if (point.x <= margin
+                    || point.y <= margin
+                    || point.x >= imageWidth - margin
+                    || point.y >= imageHeight - margin) {
+                touches++;
+            }
+        }
+        if (touches >= 3) {
+            return 0.25;
+        }
+        if (touches == 2) {
+            return 0.55;
+        }
+        if (touches == 1) {
+            return 0.85;
+        }
+        return 1.0;
     }
 
     @VisibleForTesting
     static boolean isRoughlySquare(@NonNull Point[] points) {
-        return squareQuality(points) >= 0.55;
+        return squareQuality(points) >= MIN_SQUARE_QUALITY;
     }
 
     /** 1 = perfect square, lower = more distorted / rectangular. */

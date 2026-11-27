@@ -90,9 +90,10 @@
             </LinearLayout>
         </LinearLayout>
 
-        <GridLayout
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:gravity="center"
             android:orientation="horizontal"
             android:paddingTop="15dp">
 
@@ -103,11 +104,40 @@
                 android:text="@string/capture" />
 
             <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btn_clear"
+                style="@style/button"
+                android:layout_marginHorizontal="8dp"
+                android:drawableStart="@android:drawable/ic_menu_delete"
+                android:text="@string/clear" />
+
+            <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/btn_solve"
                 style="@style/button"
-                android:layout_gravity="end"
                 android:drawableStart="@android:drawable/ic_media_play"
                 android:text="@string/solve" />
-        </GridLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:paddingTop="4dp">
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btn_undo"
+                style="@style/button"
+                android:drawableStart="@android:drawable/ic_menu_revert"
+                android:enabled="false"
+                android:text="@string/undo" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btn_redo"
+                style="@style/button"
+                android:layout_marginStart="8dp"
+                android:drawableStart="@android:drawable/ic_menu_rotate"
+                android:enabled="false"
+                android:text="@string/redo" />
+        </LinearLayout>
     </LinearLayout>
 </LinearLayout>

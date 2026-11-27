@@ -100,6 +100,37 @@ public class BoardTest {
     }
 
     @Test
+    public void solve_uniqueSample_staysUniqueWhenLookingForTwo() {
+        List<String> solutions = new ArrayList<>(2);
+        assertTrue(new Board(SampleBoards.SUDOKU_SAMPLE).solve(solutions, 2));
+        assertEquals(1, solutions.size());
+        assertEquals(SOLUTION, solutions.get(0));
+    }
+
+    @Test(timeout = 10_000)
+    public void solve_underdetermined_findsTwoSolutions() {
+        // Drop the last several clues from the unique sample so more than one
+        // completion exists; search stops as soon as two are found.
+        char[] clues = SampleBoards.SUDOKU_SAMPLE.toCharArray();
+        int cleared = 0;
+        for (int i = clues.length - 1; i >= 0 && cleared < 8; i--) {
+            if (clues[i] >= '1' && clues[i] <= '9') {
+                clues[i] = ' ';
+                cleared++;
+            }
+        }
+        List<String> solutions = new ArrayList<>(2);
+        assertTrue(new Board(new String(clues)).solve(solutions, 2));
+        assertEquals(2, solutions.size());
+        assertFalse(solutions.get(0).equals(solutions.get(1)));
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void solve_rejectsNonPositiveLimit() {
+        new Board(SampleBoards.SUDOKU_SAMPLE).solve(new ArrayList<>(), 0);
+    }
+
+    @Test
     public void convertToTextViewIndex() {
         assertEquals(0, Board.convertToTextViewIndex(0));
         assertEquals(18, Board.convertToTextViewIndex(6));
@@ -142,5 +173,22 @@ public class BoardTest {
     public void testToString() {
         assertEquals(SampleBoards.SUDOKU_SAMPLE, new Board(SampleBoards.SUDOKU_SAMPLE).toString());
         assertEquals(SOLUTION, new Board(SOLUTION).toString());
+    }
+
+    @Test
+    public void conflictingCells_marksDuplicateDigitsInSameRow() {
+        // Two 1s in row 0 (indices 7 and 8).
+        boolean[] conflicts = new Board(ERROR2).conflictingCells();
+        assertTrue(conflicts[7]);
+        assertTrue(conflicts[8]);
+        assertFalse(conflicts[0]);
+    }
+
+    @Test
+    public void conflictingCells_emptyForConsistentBoard() {
+        boolean[] conflicts = new Board(SampleBoards.SUDOKU_SAMPLE).conflictingCells();
+        for (boolean conflict : conflicts) {
+            assertFalse(conflict);
+        }
     }
 }

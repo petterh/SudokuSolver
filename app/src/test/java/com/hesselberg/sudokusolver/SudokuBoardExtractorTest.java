@@ -46,7 +46,9 @@ public class SudokuBoardExtractorTest {
         };
 
         assertTrue(SudokuBoardExtractor.isRoughlySquare(square));
-        assertFalse(SudokuBoardExtractor.isRoughlySquare(skinny));
+        assertFalse(
+                "Skinny rectangles must not count as boards",
+                SudokuBoardExtractor.isRoughlySquare(skinny));
     }
 
     @Test
@@ -70,5 +72,47 @@ public class SudokuBoardExtractorTest {
                 offCenter, 200 * 200, 1000, 1000, 1.0);
 
         assertTrue(centeredScore > offCenterScore);
+    }
+
+    @Test
+    public void scoreBoardCandidate_prefersInnerBoardOverFullFrameBorder() {
+        Point[] innerBoard = {
+                new Point(150, 150),
+                new Point(850, 150),
+                new Point(850, 850),
+                new Point(150, 850)
+        };
+        Point[] pageBorder = {
+                new Point(2, 2),
+                new Point(998, 2),
+                new Point(998, 998),
+                new Point(2, 998)
+        };
+
+        double innerScore = SudokuBoardExtractor.scoreBoardCandidate(
+                innerBoard, 700 * 700, 1000, 1000, 1.0);
+        double borderScore = SudokuBoardExtractor.scoreBoardCandidate(
+                pageBorder, 996 * 996, 1000, 1000, 1.0);
+
+        assertTrue(innerScore > borderScore);
+    }
+
+    @Test
+    public void borderTouchPenalty_penalizesEdgeHuggingCorners() {
+        Point[] floating = {
+                new Point(200, 200),
+                new Point(800, 200),
+                new Point(800, 800),
+                new Point(200, 800)
+        };
+        Point[] onBorder = {
+                new Point(1, 1),
+                new Point(999, 1),
+                new Point(999, 999),
+                new Point(1, 999)
+        };
+
+        assertEquals(1.0, SudokuBoardExtractor.borderTouchPenalty(floating, 1000, 1000), 0.001);
+        assertEquals(0.25, SudokuBoardExtractor.borderTouchPenalty(onBorder, 1000, 1000), 0.001);
     }
 }
