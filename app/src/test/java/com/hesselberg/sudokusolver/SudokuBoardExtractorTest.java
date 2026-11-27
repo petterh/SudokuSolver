@@ -46,7 +46,9 @@ public class SudokuBoardExtractorTest {
         };
 
         assertTrue(SudokuBoardExtractor.isRoughlySquare(square));
-        assertFalse(SudokuBoardExtractor.isRoughlySquare(skinny));
+        assertFalse(
+                "Skinny rectangles must not count as boards",
+                SudokuBoardExtractor.isRoughlySquare(skinny));
     }
 
     @Test

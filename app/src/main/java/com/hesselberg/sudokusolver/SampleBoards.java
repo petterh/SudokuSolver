@@ -32,6 +32,21 @@ public final class SampleBoards {
             "95   2   " +
             "2       1";
 
+    /**
+     * Clues from {@code img/good-image.jpg} / {@code img/problem-image.jpg}
+     * (same puzzle; problem image is a wider newspaper page with extra grids).
+     */
+    public static final String PROBLEM_BOARD =
+            "67   2 84" +
+            "8 4   5 1" +
+            " 12    9 " +
+            "    8  6 " +
+            "   1 9   " +
+            "   4 691 " +
+            "   824   " +
+            "         " +
+            "9 8  7   ";
+
     private SampleBoards() {
     }
 }
