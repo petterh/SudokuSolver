@@ -15,8 +15,11 @@
     <string name="capture_source_camera">Camera</string>
     <string name="capture_source_gallery">Gallery</string>
     <string name="capture_preview_title">Use this photo?</string>
+    <string name="capture_preview_board_title">Use this board?</string>
     <string name="capture_preview_description">Photo of the Sudoku board</string>
+    <string name="capture_preview_finding_board">Finding board…</string>
     <string name="capture_confirm">Use photo</string>
+    <string name="capture_confirm_board">Use board</string>
     <string name="capture_retake">Retake</string>
     <string name="capture_cancel">Cancel</string>
     <string name="camera_permission_denied">Camera permission is required to capture a puzzle.</string>

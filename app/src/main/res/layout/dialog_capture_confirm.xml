@@ -1,8 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:orientation="vertical"
     android:padding="16dp">
+
+    <TextView
+        android:id="@+id/capture_preview_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:paddingBottom="8dp"
+        android:text="@string/capture_preview_finding_board"
+        android:textAppearance="?attr/textAppearanceBodyMedium" />
 
     <ImageView
         android:id="@+id/capture_preview"
@@ -12,4 +22,4 @@
         android:contentDescription="@string/capture_preview_description"
         android:maxHeight="360dp"
         android:scaleType="fitCenter" />
-</FrameLayout>
+</LinearLayout>

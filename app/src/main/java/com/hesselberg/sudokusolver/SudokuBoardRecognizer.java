@@ -68,13 +68,26 @@ public final class SudokuBoardRecognizer {
             TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
 
     public void recognize(@NonNull Bitmap bitmap, @NonNull Executor executor, @NonNull Callback callback) {
+        recognize(bitmap, executor, true, callback);
+    }
+
+    /**
+     * @param extractBoard when false, OCR {@code bitmap} as-is (already perspective-warped)
+     */
+    public void recognize(
+            @NonNull Bitmap bitmap,
+            @NonNull Executor executor,
+            boolean extractBoard,
+            @NonNull Callback callback) {
         executor.execute(() -> {
             Bitmap extracted = null;
-            try {
-                extracted = SudokuBoardExtractor.extractBoard(bitmap);
-            } catch (RuntimeException e) {
-                callback.onFailure(e);
-                return;
+            if (extractBoard) {
+                try {
+                    extracted = SudokuBoardExtractor.extractBoard(bitmap);
+                } catch (RuntimeException e) {
+                    callback.onFailure(e);
+                    return;
+                }
             }
 
             final boolean recycleExtracted = extracted != null;

@@ -287,47 +287,111 @@ public class MainActivity extends AppCompatActivity {
         new File(path).delete();
     }
 
-    private void showCaptureConfirmDialog(@NonNull Bitmap bitmap) {
+    private void showCaptureConfirmDialog(@NonNull Bitmap sourceBitmap) {
         View content = LayoutInflater.from(this).inflate(R.layout.dialog_capture_confirm, null, false);
         ImageView preview = content.findViewById(R.id.capture_preview);
-        preview.setImageBitmap(bitmap);
+        TextView status = content.findViewById(R.id.capture_preview_status);
+        preview.setImageBitmap(sourceBitmap);
 
-        new MaterialAlertDialogBuilder(this)
+        // Holds the bitmap OCR should read; swapped to the warp when extract succeeds.
+        final Bitmap[] ocrBitmap = {sourceBitmap};
+        final boolean[] ocrAlreadyWarped = {false};
+        final Bitmap[] warpedBitmap = {null};
+        final boolean[] confirmed = {false};
+
+        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.capture_preview_title)
                 .setView(content)
-                .setPositiveButton(R.string.capture_confirm, (dialog, which) -> recognizeCapturedBoard(bitmap))
-                .setNeutralButton(R.string.capture_retake, (dialog, which) -> startCapture())
+                .setPositiveButton(R.string.capture_confirm, (d, which) -> {
+                    confirmed[0] = true;
+                    recognizeCapturedBoard(ocrBitmap[0], !ocrAlreadyWarped[0]);
+                })
+                .setNeutralButton(R.string.capture_retake, (d, which) -> startCapture())
                 .setNegativeButton(R.string.capture_cancel, null)
-                .show();
+                .create();
+        dialog.setOnDismissListener(d -> {
+            // Confirmed path keeps the warp for OCR; cancel/retake can free it.
+            if (!confirmed[0]) {
+                recycleBitmap(warpedBitmap[0]);
+            }
+        });
+        dialog.show();
+
+        backgroundExecutor.execute(() -> {
+            Bitmap extracted = null;
+            try {
+                extracted = SudokuBoardExtractor.extractBoard(sourceBitmap);
+            } catch (RuntimeException ignored) {
+                // Keep the original photo preview; OCR will try extract again.
+            }
+            final Bitmap warped = extracted;
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed() || !dialog.isShowing()) {
+                    recycleBitmap(warped);
+                    return;
+                }
+                if (warped == null) {
+                    status.setVisibility(View.GONE);
+                    return;
+                }
+                warpedBitmap[0] = warped;
+                ocrBitmap[0] = warped;
+                ocrAlreadyWarped[0] = true;
+                preview.setImageBitmap(warped);
+                status.setVisibility(View.GONE);
+                dialog.setTitle(R.string.capture_preview_board_title);
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setText(R.string.capture_confirm_board);
+            });
+        });
     }
 
-    private void recognizeCapturedBoard(@NonNull Bitmap bitmap) {
+    private void recognizeCapturedBoard(@NonNull Bitmap bitmap, boolean extractBoard) {
         enableButtons(false);
         Toast.makeText(this, R.string.recognizing_board, Toast.LENGTH_SHORT).show();
 
-        boardRecognizer.recognize(bitmap, backgroundExecutor, new SudokuBoardRecognizer.Callback() {
-            @Override
-            public void onSuccess(@NonNull String board) {
-                runOnUiThread(() -> {
-                    if (isFinishing() || isDestroyed()) {
-                        return;
+        boardRecognizer.recognize(
+                bitmap,
+                backgroundExecutor,
+                extractBoard,
+                new SudokuBoardRecognizer.Callback() {
+                    @Override
+                    public void onSuccess(@NonNull String board) {
+                        runOnUiThread(() -> {
+                            if (!extractBoard) {
+                                recycleBitmap(bitmap);
+                            }
+                            if (isFinishing() || isDestroyed()) {
+                                return;
+                            }
+                            applyRecognizedBoard(board);
+                            enableButtons(true);
+                        });
                     }
-                    applyRecognizedBoard(board);
-                    enableButtons(true);
-                });
-            }
 
-            @Override
-            public void onFailure(@NonNull Exception error) {
-                runOnUiThread(() -> {
-                    if (isFinishing() || isDestroyed()) {
-                        return;
+                    @Override
+                    public void onFailure(@NonNull Exception error) {
+                        runOnUiThread(() -> {
+                            if (!extractBoard) {
+                                recycleBitmap(bitmap);
+                            }
+                            if (isFinishing() || isDestroyed()) {
+                                return;
+                            }
+                            Toast.makeText(
+                                            MainActivity.this,
+                                            R.string.recognition_failed,
+                                            Toast.LENGTH_LONG)
+                                    .show();
+                            enableButtons(true);
+                        });
                     }
-                    Toast.makeText(MainActivity.this, R.string.recognition_failed, Toast.LENGTH_LONG).show();
-                    enableButtons(true);
                 });
-            }
-        });
+    }
+
+    private static void recycleBitmap(@Nullable Bitmap bitmap) {
+        if (bitmap != null && !bitmap.isRecycled()) {
+            bitmap.recycle();
+        }
     }
 
     private void applyRecognizedBoard(@NonNull String board) {
