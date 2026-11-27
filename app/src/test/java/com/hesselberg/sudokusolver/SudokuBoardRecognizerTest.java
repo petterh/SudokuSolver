@@ -68,6 +68,34 @@ public class SudokuBoardRecognizerTest {
     }
 
     @Test
+    public void mergeBoardPreferPrimary_fillsBlanksWithoutOverriding() {
+        String primary =
+                "6        " +
+                "         " +
+                "         " +
+                "         " +
+                "         " +
+                "         " +
+                "         " +
+                "         " +
+                "         ";
+        String secondary =
+                "7        " +
+                "8        " +
+                "         " +
+                "         " +
+                "         " +
+                "         " +
+                "         " +
+                "         " +
+                "        9";
+        String merged = SudokuBoardRecognizer.mergeBoardPreferPrimary(primary, secondary);
+        assertEquals('6', merged.charAt(0));
+        assertEquals('8', merged.charAt(9));
+        assertEquals('9', merged.charAt(80));
+    }
+
+    @Test
     public void normalizeSudokuDigit_mapsNineConfusionsAndUnicode() {
         assertEquals(Character.valueOf('9'), SudokuBoardRecognizer.normalizeSudokuDigit("9"));
         assertEquals(Character.valueOf('9'), SudokuBoardRecognizer.normalizeSudokuDigit("g"));
