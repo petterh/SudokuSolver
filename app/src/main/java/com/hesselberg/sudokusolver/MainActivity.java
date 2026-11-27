@@ -22,6 +22,7 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 import androidx.exifinterface.media.ExifInterface;
@@ -306,29 +307,52 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /**
-     * Milestone 3: tap a cell to cycle blank → 1..9 → blank and update {@link #currentBoard}.
-     */
+    /** Opens a digit keypad so OCR mistakes can be fixed in one tap. */
     private void editCell(int stringIndex) {
-        char[] chars = currentBoard.toCharArray();
-        chars[stringIndex] = nextClueValue(chars[stringIndex]);
-        currentBoard = new String(chars);
-        clueCells[stringIndex] = chars[stringIndex] != ' ';
+        View content = LayoutInflater.from(this).inflate(R.layout.dialog_digit_keypad, null, false);
+        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.edit_cell_title)
+                .setView(content)
+                .setNegativeButton(R.string.capture_cancel, null);
+        final AlertDialog dialog = builder.create();
+
+        int[] digitIds = {
+                R.id.digit_1, R.id.digit_2, R.id.digit_3,
+                R.id.digit_4, R.id.digit_5, R.id.digit_6,
+                R.id.digit_7, R.id.digit_8, R.id.digit_9
+        };
+        for (int i = 0; i < digitIds.length; i++) {
+            final char digit = (char) ('1' + i);
+            content.findViewById(digitIds[i]).setOnClickListener(v -> {
+                setCellValue(stringIndex, digit);
+                dialog.dismiss();
+            });
+        }
+        content.findViewById(R.id.digit_clear).setOnClickListener(v -> {
+            setCellValue(stringIndex, ' ');
+            dialog.dismiss();
+        });
+        dialog.show();
+    }
+
+    private void setCellValue(int stringIndex, char value) {
+        currentBoard = withCellValue(currentBoard, stringIndex, value);
+        clueCells[stringIndex] = value != ' ';
 
         List<TextView> textViews = getTextViews();
         int textViewIndex = Board.convertToTextViewIndex(stringIndex);
-        applyCellVisual(textViews.get(textViewIndex), chars[stringIndex], clueCells[stringIndex]);
+        applyCellVisual(textViews.get(textViewIndex), value, clueCells[stringIndex]);
     }
 
     @VisibleForTesting
-    static char nextClueValue(char current) {
-        if (current < '1' || current > '9') {
-            return '1';
+    @NonNull
+    static String withCellValue(@NonNull String board, int stringIndex, char value) {
+        char[] chars = board.toCharArray();
+        if (stringIndex < 0 || stringIndex >= chars.length) {
+            return board;
         }
-        if (current == '9') {
-            return ' ';
-        }
-        return (char) (current + 1);
+        chars[stringIndex] = value;
+        return new String(chars);
     }
 
     private void markCluesFromBoard(@NonNull String board) {

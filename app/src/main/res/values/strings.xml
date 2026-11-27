@@ -16,4 +16,15 @@
     <string name="recognition_invalid">Recognized digits conflict with Sudoku rules. Showing them anyway so you can edit.</string>
     <string name="recognition_success">Loaded %1$d clues from the photo. Tap cells to fix mistakes.</string>
     <string name="capture_failed">Could not save or read the photo.</string>
+    <string name="edit_cell_title">Set digit</string>
+    <string name="digit_1">1</string>
+    <string name="digit_2">2</string>
+    <string name="digit_3">3</string>
+    <string name="digit_4">4</string>
+    <string name="digit_5">5</string>
+    <string name="digit_6">6</string>
+    <string name="digit_7">7</string>
+    <string name="digit_8">8</string>
+    <string name="digit_9">9</string>
+    <string name="digit_clear">Clear</string>
 </resources>
