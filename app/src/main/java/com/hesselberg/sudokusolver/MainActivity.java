@@ -1,6 +1,7 @@
 package com.hesselberg.sudokusolver;
 
 import android.Manifest;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -22,7 +23,6 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
-import androidx.core.content.FileProvider;
 import androidx.exifinterface.media.ExifInterface;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -38,17 +38,6 @@ import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity {
 
-    private static final String TEST_BOARD =
-            "     3 18" +
-            "6     425" +
-            "   5     " +
-            "  2 3   4" +
-            " 91  8 6 " +
-            "         " +
-            "     463 " +
-            "95   2   " +
-            "2       1";
-
     private static final int CAPTURE_MAX_EDGE_PX = 1600;
 
     private ActivityMainBinding binding;
@@ -60,9 +49,6 @@ public class MainActivity extends AppCompatActivity {
     /** True for cells treated as given clues (shown bold). */
     private final boolean[] clueCells = new boolean[Board.DIM * Board.DIM];
 
-    private Uri captureUri;
-    private File captureFile;
-
     private final ActivityResultLauncher<String> requestCameraPermission =
             registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
                 if (granted) {
@@ -72,13 +58,25 @@ public class MainActivity extends AppCompatActivity {
                 }
             });
 
-    private final ActivityResultLauncher<Uri> takePicture =
-            registerForActivityResult(new ActivityResultContracts.TakePicture(), success -> {
-                if (!success || captureUri == null) {
+    private final ActivityResultLauncher<Intent> captureBoard =
+            registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+                if (result.getResultCode() != RESULT_OK || result.getData() == null) {
                     return;
                 }
-                Bitmap bitmap = loadCaptureBitmap(captureUri);
-                deleteCaptureFile();
+                Uri uri = result.getData().getData();
+                if (uri == null) {
+                    String uriString = result.getData().getStringExtra(CaptureActivity.EXTRA_PHOTO_URI);
+                    if (uriString != null) {
+                        uri = Uri.parse(uriString);
+                    }
+                }
+                if (uri == null) {
+                    Toast.makeText(this, R.string.capture_failed, Toast.LENGTH_LONG).show();
+                    return;
+                }
+                String path = result.getData().getStringExtra(CaptureActivity.EXTRA_PHOTO_PATH);
+                Bitmap bitmap = loadCaptureBitmap(uri);
+                deleteCaptureFile(path);
                 if (bitmap != null) {
                     showCaptureConfirmDialog(bitmap);
                 } else {
@@ -109,7 +107,6 @@ public class MainActivity extends AppCompatActivity {
     protected void onDestroy() {
         backgroundExecutor.shutdownNow();
         boardRecognizer.close();
-        deleteCaptureFile();
         super.onDestroy();
     }
 
@@ -123,22 +120,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void launchCamera() {
-        try {
-            captureUri = createCaptureUri();
-            takePicture.launch(captureUri);
-        } catch (Exception e) {
-            Toast.makeText(this, R.string.camera_unavailable, Toast.LENGTH_LONG).show();
-        }
-    }
-
-    @NonNull
-    private Uri createCaptureUri() throws IOException {
-        File dir = new File(getCacheDir(), "capture");
-        if (!dir.exists() && !dir.mkdirs()) {
-            throw new IOException("Unable to create capture directory");
-        }
-        captureFile = File.createTempFile("sudoku_", ".jpg", dir);
-        return FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", captureFile);
+        captureBoard.launch(new Intent(this, CaptureActivity.class));
     }
 
     @Nullable
@@ -242,13 +224,12 @@ public class MainActivity extends AppCompatActivity {
         return Math.max(1, inSampleSize);
     }
 
-    private void deleteCaptureFile() {
-        if (captureFile != null) {
-            //noinspection ResultOfMethodCallIgnored
-            captureFile.delete();
-            captureFile = null;
+    private void deleteCaptureFile(@Nullable String path) {
+        if (path == null || path.isEmpty()) {
+            return;
         }
-        captureUri = null;
+        //noinspection ResultOfMethodCallIgnored
+        new File(path).delete();
     }
 
     private void showCaptureConfirmDialog(@NonNull Bitmap bitmap) {

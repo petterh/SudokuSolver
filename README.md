@@ -15,7 +15,7 @@ Android Studio is enough on its own if the Android SDK is installed through its 
 | IDE | [Android Studio](https://developer.android.com/studio) (current stable; needs AGP 9.5 support) |
 | JDK | **21** for app source/target; **17+** to run Gradle (Studio’s bundled JBR is fine) |
 | Android SDK | Platform **API 37** (compile/target SDK); Build-Tools **36.0.0+** |
-| Device / emulator | API **23+** (Android 6.0; `minSdk`) |
+| Device / emulator | API **24+** (Android 7.0; `minSdk`) |
 | Build system | Gradle **9.9.2** via the included wrapper (`gradlew`); Android Gradle Plugin **9.5.3** |
 
 Open the project root in Android Studio, let it sync Gradle, then run the `app` configuration on an emulator or device.
