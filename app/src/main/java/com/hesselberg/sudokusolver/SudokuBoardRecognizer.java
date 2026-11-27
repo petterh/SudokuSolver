@@ -16,15 +16,17 @@ import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.Executor;
 
 /**
- * Milestone 2: OCR a photo of a Sudoku grid into the 81-character board format
- * used by {@link Board} (digits {@code '1'}–{@code '9'} or space).
+ * OCR a photo of a Sudoku grid into the 81-character board format used by {@link Board}
+ * (digits {@code '1'}–{@code '9'} or space).
  *
- * <p>Assumes a fairly straight-on photo. Digits are mapped into a 9×9 grid using
- * their bounding-box centers, fitted to the bounds of all detected digits.
+ * <p>Assumes a fairly straight-on, upright photo. Digits are mapped into a 9×9 grid using
+ * their bounding-box centers, fitted to the bounds of the main digit cluster.
  */
 public final class SudokuBoardRecognizer {
 
@@ -40,11 +42,27 @@ public final class SudokuBoardRecognizer {
         final char digit;
         final float centerX;
         final float centerY;
+        final float area;
 
         DigitHit(char digit, float centerX, float centerY) {
+            this(digit, centerX, centerY, 1f);
+        }
+
+        DigitHit(char digit, float centerX, float centerY, float area) {
             this.digit = digit;
             this.centerX = centerX;
             this.centerY = centerY;
+            this.area = Math.max(area, 1f);
+        }
+    }
+
+    private static final class CellCandidate {
+        final char digit;
+        final float distSq;
+
+        CellCandidate(char digit, float distSq) {
+            this.digit = digit;
+            this.distSq = distSq;
         }
     }
 
@@ -89,11 +107,16 @@ public final class SudokuBoardRecognizer {
             return new String(cells);
         }
 
+        List<DigitHit> filtered = filterHits(hits);
+        if (filtered.isEmpty()) {
+            filtered = hits;
+        }
+
         float minX = Float.MAX_VALUE;
         float maxX = -Float.MAX_VALUE;
         float minY = Float.MAX_VALUE;
         float maxY = -Float.MAX_VALUE;
-        for (DigitHit hit : hits) {
+        for (DigitHit hit : filtered) {
             minX = Math.min(minX, hit.centerX);
             maxX = Math.max(maxX, hit.centerX);
             minY = Math.min(minY, hit.centerY);
@@ -112,13 +135,87 @@ public final class SudokuBoardRecognizer {
         width = maxX - minX;
         height = maxY - minY;
 
-        for (DigitHit hit : hits) {
+        CellCandidate[] best = new CellCandidate[Board.DIM * Board.DIM];
+        for (DigitHit hit : filtered) {
             int col = clamp((int) ((hit.centerX - minX) / width * Board.DIM), 0, Board.DIM - 1);
             int row = clamp((int) ((hit.centerY - minY) / height * Board.DIM), 0, Board.DIM - 1);
-            cells[row * Board.DIM + col] = hit.digit;
+            float cellCenterX = minX + (col + 0.5f) * width / Board.DIM;
+            float cellCenterY = minY + (row + 0.5f) * height / Board.DIM;
+            float dx = hit.centerX - cellCenterX;
+            float dy = hit.centerY - cellCenterY;
+            float distSq = dx * dx + dy * dy;
+            int index = row * Board.DIM + col;
+            if (best[index] == null || distSq < best[index].distSq) {
+                best[index] = new CellCandidate(hit.digit, distSq);
+            }
+        }
+
+        for (int i = 0; i < best.length; i++) {
+            if (best[i] != null) {
+                cells[i] = best[i].digit;
+            }
         }
 
         return new String(cells);
+    }
+
+    /**
+     * Drop page titles / background noise: keep digits near typical Sudoku digit size
+     * and inside the main spatial cluster.
+     */
+    @VisibleForTesting
+    @NonNull
+    static List<DigitHit> filterHits(@NonNull List<DigitHit> hits) {
+        if (hits.size() < 6) {
+            return hits;
+        }
+
+        List<Float> areas = new ArrayList<>(hits.size());
+        for (DigitHit hit : hits) {
+            areas.add(hit.area);
+        }
+        Collections.sort(areas);
+        float medianArea = areas.get(areas.size() / 2);
+
+        List<DigitHit> sized = new ArrayList<>();
+        for (DigitHit hit : hits) {
+            if (hit.area >= medianArea * 0.2f && hit.area <= medianArea * 4f) {
+                sized.add(hit);
+            }
+        }
+        if (sized.size() < 6) {
+            sized = hits;
+        }
+
+        float meanX = 0f;
+        float meanY = 0f;
+        for (DigitHit hit : sized) {
+            meanX += hit.centerX;
+            meanY += hit.centerY;
+        }
+        meanX /= sized.size();
+        meanY /= sized.size();
+
+        List<Float> distances = new ArrayList<>(sized.size());
+        for (DigitHit hit : sized) {
+            float dx = hit.centerX - meanX;
+            float dy = hit.centerY - meanY;
+            distances.add((float) Math.hypot(dx, dy));
+        }
+        Collections.sort(distances);
+        float medianDist = Math.max(distances.get(distances.size() / 2), 1f);
+        float maxDist = medianDist * 2.6f;
+
+        List<DigitHit> clustered = new ArrayList<>();
+        for (int i = 0; i < sized.size(); i++) {
+            DigitHit hit = sized.get(i);
+            float dx = hit.centerX - meanX;
+            float dy = hit.centerY - meanY;
+            if (Math.hypot(dx, dy) <= maxDist) {
+                clustered.add(hit);
+            }
+        }
+        return clustered.size() >= 6 ? clustered : sized;
     }
 
     @NonNull
@@ -138,6 +235,8 @@ public final class SudokuBoardRecognizer {
                 }
             }
         }
+        // Prefer more compact symbols when sorting is useful for debugging/stability.
+        hits.sort(Comparator.comparingDouble(h -> h.area));
         return hits;
     }
 
@@ -156,10 +255,11 @@ public final class SudokuBoardRecognizer {
         }
         // Split a multi-digit element evenly across its bounding box.
         float slice = box.width() / (float) digits.length();
+        float sliceArea = Math.max(slice * box.height(), 1f);
         for (int i = 0; i < digits.length(); i++) {
             float centerX = box.left + slice * (i + 0.5f);
             float centerY = box.exactCenterY();
-            hits.add(new DigitHit(digits.charAt(i), centerX, centerY));
+            hits.add(new DigitHit(digits.charAt(i), centerX, centerY, sliceArea));
         }
     }
 
@@ -170,7 +270,8 @@ public final class SudokuBoardRecognizer {
         }
         char ch = raw.charAt(0);
         if (ch >= '1' && ch <= '9') {
-            hits.add(new DigitHit(ch, box.exactCenterX(), box.exactCenterY()));
+            float area = Math.max(box.width(), 1) * Math.max(box.height(), 1);
+            hits.add(new DigitHit(ch, box.exactCenterX(), box.exactCenterY(), area));
         }
     }
 

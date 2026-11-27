@@ -2,6 +2,7 @@ package com.hesselberg.sudokusolver;
 
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -41,6 +42,28 @@ public class SudokuBoardRecognizerTest {
         assertEquals(81, board.length());
         assertTrue(board.trim().isEmpty());
         assertEquals(0, SudokuBoardRecognizer.countClues(board));
+    }
+
+    @Test
+    public void filterHits_dropsOversizedAndFarAwayNoise() {
+        List<SudokuBoardRecognizer.DigitHit> hits = new ArrayList<>();
+        for (int row = 0; row < 3; row++) {
+            for (int col = 0; col < 3; col++) {
+                hits.add(new SudokuBoardRecognizer.DigitHit(
+                        '1', col + 0.5f, row + 0.5f, 100f));
+            }
+        }
+        // Page title / background noise
+        hits.add(new SudokuBoardRecognizer.DigitHit('9', 50f, 50f, 100f));
+        hits.add(new SudokuBoardRecognizer.DigitHit('8', 1.5f, 1.5f, 10_000f));
+
+        List<SudokuBoardRecognizer.DigitHit> filtered = SudokuBoardRecognizer.filterHits(hits);
+        assertEquals(9, filtered.size());
+        for (SudokuBoardRecognizer.DigitHit hit : filtered) {
+            assertTrue(hit.centerX < 10f);
+            assertTrue(hit.centerY < 10f);
+            assertTrue(hit.area < 1000f);
+        }
     }
 
     private static SudokuBoardRecognizer.DigitHit hit(char digit, float col, float row) {

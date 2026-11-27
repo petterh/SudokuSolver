@@ -4,6 +4,7 @@ import android.Manifest;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Matrix;
 import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
@@ -22,6 +23,7 @@ import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
+import androidx.exifinterface.media.ExifInterface;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.hesselberg.sudokusolver.databinding.ActivityMainBinding;
@@ -140,6 +142,17 @@ public class MainActivity extends AppCompatActivity {
     @Nullable
     private Bitmap loadCaptureBitmap(@NonNull Uri uri) {
         try {
+            // Camera JPEGs often store orientation in EXIF; BitmapFactory ignores it.
+            // TakePicturePreview returned an upright bitmap, which is why OCR was better before.
+            int orientation = ExifInterface.ORIENTATION_NORMAL;
+            try (InputStream in = getContentResolver().openInputStream(uri)) {
+                if (in != null) {
+                    ExifInterface exif = new ExifInterface(in);
+                    orientation = exif.getAttributeInt(
+                            ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
+                }
+            }
+
             BitmapFactory.Options bounds = new BitmapFactory.Options();
             bounds.inJustDecodeBounds = true;
             try (InputStream in = getContentResolver().openInputStream(uri)) {
@@ -152,15 +165,68 @@ public class MainActivity extends AppCompatActivity {
             BitmapFactory.Options opts = new BitmapFactory.Options();
             opts.inSampleSize = calculateInSampleSize(bounds, CAPTURE_MAX_EDGE_PX, CAPTURE_MAX_EDGE_PX);
             opts.inPreferredConfig = Bitmap.Config.ARGB_8888;
+            Bitmap decoded;
             try (InputStream in = getContentResolver().openInputStream(uri)) {
                 if (in == null) {
                     return null;
                 }
-                return BitmapFactory.decodeStream(in, null, opts);
+                decoded = BitmapFactory.decodeStream(in, null, opts);
             }
+            if (decoded == null) {
+                return null;
+            }
+            return applyExifOrientation(decoded, orientation);
         } catch (IOException e) {
             return null;
         }
+    }
+
+    @NonNull
+    private static Bitmap applyExifOrientation(@NonNull Bitmap bitmap, int orientation) {
+        int rotationDegrees = 0;
+        boolean flipX = false;
+        boolean flipY = false;
+        switch (orientation) {
+            case ExifInterface.ORIENTATION_FLIP_HORIZONTAL:
+                flipX = true;
+                break;
+            case ExifInterface.ORIENTATION_ROTATE_180:
+                rotationDegrees = 180;
+                break;
+            case ExifInterface.ORIENTATION_FLIP_VERTICAL:
+                flipY = true;
+                break;
+            case ExifInterface.ORIENTATION_TRANSPOSE:
+                rotationDegrees = 90;
+                flipX = true;
+                break;
+            case ExifInterface.ORIENTATION_ROTATE_90:
+                rotationDegrees = 90;
+                break;
+            case ExifInterface.ORIENTATION_TRANSVERSE:
+                rotationDegrees = 270;
+                flipX = true;
+                break;
+            case ExifInterface.ORIENTATION_ROTATE_270:
+                rotationDegrees = 270;
+                break;
+            case ExifInterface.ORIENTATION_NORMAL:
+            case ExifInterface.ORIENTATION_UNDEFINED:
+            default:
+                return bitmap;
+        }
+
+        Matrix matrix = new Matrix();
+        matrix.postScale(flipX ? -1f : 1f, flipY ? -1f : 1f);
+        if (rotationDegrees != 0) {
+            matrix.postRotate(rotationDegrees);
+        }
+        Bitmap oriented = Bitmap.createBitmap(
+                bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
+        if (oriented != bitmap) {
+            bitmap.recycle();
+        }
+        return oriented;
     }
 
     private static int calculateInSampleSize(
