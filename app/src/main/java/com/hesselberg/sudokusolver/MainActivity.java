@@ -93,6 +93,8 @@ public class MainActivity extends AppCompatActivity {
         setContentView(binding.getRoot());
         binding.btnCapture.setOnClickListener(v -> startCapture());
         binding.btnSolve.setOnClickListener(v -> solveBoard());
+        // Warm up native OpenCV so the first capture does not pay load cost mid-OCR.
+        backgroundExecutor.execute(SudokuBoardExtractor::ensureOpenCvLoaded);
 
         markCluesFromBoard(currentBoard);
         List<TextView> textViews = getTextViews();
