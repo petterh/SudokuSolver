@@ -7,11 +7,11 @@ solution with depth-first search.
 
 1. **Capture** a puzzle with the in-app camera (framing overlay) or load one from the **gallery**
 2. **Preview** the OpenCV-warped board before committing
-3. **OCR** clues on-device with ML Kit (edit mistakes via the digit keypad)
+3. **OCR** clues on-device with ML Kit (full-frame plus per-cell crops); long-press a given clue to fix it
 4. **Highlight** conflicting digits; **Solve** with a uniqueness check (warns if more than one solution)
-5. **Undo**, **Clear**, and **persist** the board across rotation and process death
+5. **Undo** / **Redo**, **Clear**, and **persist** the board across rotation and process death
 
-Given clues stay bold after solving so you can tell them apart from filled cells.
+Given clues stay bold (and locked to short taps) after OCR/solving so you can tell them apart from filled cells.
 
 ## Dev environment
 
