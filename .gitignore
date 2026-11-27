@@ -21,9 +21,10 @@ local.properties
 .idea/deviceManager.xml
 .idea/dictionaries/
 .idea/misc.xml
-.idea/gradle.xml
 .idea/compiler.xml
 .idea/jarRepositories.xml
 .idea/migrations.xml
 .idea/AndroidProjectSystem.xml
 .idea/.name
+# Keep .idea/gradle.xml and .idea/runConfigurations/ tracked so Run can resolve :app
+

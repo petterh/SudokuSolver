@@ -1,15 +1,24 @@
 package com.hesselberg.sudokusolver;
 
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
 import android.graphics.Typeface;
 import android.os.Bundle;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
 
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.hesselberg.sudokusolver.databinding.ActivityMainBinding;
 
 import java.util.ArrayList;
@@ -31,14 +40,34 @@ public class MainActivity extends AppCompatActivity {
             "4  2  73 ";
 
     private ActivityMainBinding binding;
-    private final ExecutorService solverExecutor = Executors.newSingleThreadExecutor();
+    private final ExecutorService backgroundExecutor = Executors.newSingleThreadExecutor();
+    private final SudokuBoardRecognizer boardRecognizer = new SudokuBoardRecognizer();
+
+    /** Puzzle currently shown / solved. */
+    private String currentBoard = TEST_BOARD;
+
+    private final ActivityResultLauncher<String> requestCameraPermission =
+            registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
+                if (granted) {
+                    launchCamera();
+                } else {
+                    Toast.makeText(this, R.string.camera_permission_denied, Toast.LENGTH_LONG).show();
+                }
+            });
+
+    private final ActivityResultLauncher<Void> takePicturePreview =
+            registerForActivityResult(new ActivityResultContracts.TakePicturePreview(), bitmap -> {
+                if (bitmap != null) {
+                    showCaptureConfirmDialog(bitmap);
+                }
+            });
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
-        binding.btnCapture.setOnClickListener(v -> showBoard(TEST_BOARD, true));
+        binding.btnCapture.setOnClickListener(v -> startCapture());
         binding.btnSolve.setOnClickListener(v -> solveBoard());
 
         List<TextView> textViews = getTextViews();
@@ -52,20 +81,102 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
-        solverExecutor.shutdownNow();
+        backgroundExecutor.shutdownNow();
+        boardRecognizer.close();
         super.onDestroy();
+    }
+
+    private void startCapture() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+                == PackageManager.PERMISSION_GRANTED) {
+            launchCamera();
+        } else {
+            requestCameraPermission.launch(Manifest.permission.CAMERA);
+        }
+    }
+
+    private void launchCamera() {
+        try {
+            takePicturePreview.launch(null);
+        } catch (Exception e) {
+            Toast.makeText(this, R.string.camera_unavailable, Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void showCaptureConfirmDialog(@NonNull Bitmap bitmap) {
+        View content = LayoutInflater.from(this).inflate(R.layout.dialog_capture_confirm, null, false);
+        ImageView preview = content.findViewById(R.id.capture_preview);
+        preview.setImageBitmap(bitmap);
+
+        new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.capture_preview_title)
+                .setView(content)
+                .setPositiveButton(R.string.capture_confirm, (dialog, which) -> recognizeCapturedBoard(bitmap))
+                .setNeutralButton(R.string.capture_retake, (dialog, which) -> launchCamera())
+                .setNegativeButton(R.string.capture_cancel, null)
+                .show();
+    }
+
+    /**
+     * Milestone 2: OCR the confirmed photo into an 81-character board and display it.
+     */
+    private void recognizeCapturedBoard(@NonNull Bitmap bitmap) {
+        enableButtons(false);
+        Toast.makeText(this, R.string.recognizing_board, Toast.LENGTH_SHORT).show();
+
+        boardRecognizer.recognize(bitmap, backgroundExecutor, new SudokuBoardRecognizer.Callback() {
+            @Override
+            public void onSuccess(@NonNull String board) {
+                runOnUiThread(() -> {
+                    if (isFinishing() || isDestroyed()) {
+                        return;
+                    }
+                    applyRecognizedBoard(board);
+                    enableButtons(true);
+                });
+            }
+
+            @Override
+            public void onFailure(@NonNull Exception error) {
+                runOnUiThread(() -> {
+                    if (isFinishing() || isDestroyed()) {
+                        return;
+                    }
+                    Toast.makeText(MainActivity.this, R.string.recognition_failed, Toast.LENGTH_LONG).show();
+                    enableButtons(true);
+                });
+            }
+        });
+    }
+
+    private void applyRecognizedBoard(@NonNull String board) {
+        currentBoard = board;
+        showBoard(currentBoard, true);
+
+        int clues = SudokuBoardRecognizer.countClues(board);
+        Toast.makeText(this, getString(R.string.recognition_success, clues), Toast.LENGTH_SHORT).show();
+
+        if (!new Board(board).cluesAreConsistent()) {
+            Toast.makeText(this, R.string.recognition_invalid, Toast.LENGTH_LONG).show();
+        }
     }
 
     private void solveBoard() {
         enableButtons(false);
-        solverExecutor.execute(() -> {
+        final String boardToSolve = currentBoard;
+        backgroundExecutor.execute(() -> {
             List<String> solutions = new ArrayList<>(1);
-            new Board(TEST_BOARD).solve(solutions);
+            new Board(boardToSolve).solve(solutions);
             runOnUiThread(() -> {
                 if (isFinishing() || isDestroyed()) {
                     return;
                 }
-                showBoard(solutions.get(0), false);
+                if (!solutions.isEmpty()) {
+                    currentBoard = solutions.get(0);
+                    showBoard(currentBoard, false);
+                } else {
+                    Toast.makeText(this, "No solution found", Toast.LENGTH_SHORT).show();
+                }
                 enableButtons(true);
             });
         });
@@ -108,6 +219,8 @@ public class MainActivity extends AppCompatActivity {
             if (setBold && ch[0] != ' ') {
                 textView.setTypeface(null, Typeface.BOLD);
                 textView.setTextColor(0xff000000);
+            } else if (!setBold) {
+                textView.setTypeface(null, Typeface.NORMAL);
             }
         }
     }
