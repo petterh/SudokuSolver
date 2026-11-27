@@ -48,6 +48,7 @@ public class MainActivity extends AppCompatActivity {
     private String currentBoard = SampleBoards.EMPTY;
     /** True for cells treated as given clues (shown bold). */
     private final boolean[] clueCells = new boolean[Board.DIM * Board.DIM];
+    private final BoardHistory boardHistory = new BoardHistory();
 
     private final ActivityResultLauncher<String> requestCameraPermission =
             registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
@@ -107,6 +108,7 @@ public class MainActivity extends AppCompatActivity {
         binding.btnCapture.setOnClickListener(v -> startCapture());
         binding.btnClear.setOnClickListener(v -> confirmClearBoard());
         binding.btnSolve.setOnClickListener(v -> solveBoard());
+        binding.btnUndo.setOnClickListener(v -> undoBoard());
         // Warm up native OpenCV so the first capture does not pay load cost mid-OCR.
         backgroundExecutor.execute(SudokuBoardExtractor::ensureOpenCvLoaded);
 
@@ -122,6 +124,7 @@ public class MainActivity extends AppCompatActivity {
             textView.setOnClickListener(v -> editCell(stringIndex));
         }
         showBoard(currentBoard);
+        updateUndoButton();
     }
 
     @Override
@@ -193,10 +196,35 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void clearBoard() {
+        pushHistory();
         currentBoard = SampleBoards.EMPTY;
         markCluesFromBoard(currentBoard);
         BoardStore.clear(boardPrefs());
         showBoard(currentBoard);
+        updateUndoButton();
+    }
+
+    private void undoBoard() {
+        BoardHistory.Snapshot snapshot = boardHistory.pop();
+        if (snapshot == null) {
+            Toast.makeText(this, R.string.undo_empty, Toast.LENGTH_SHORT).show();
+            updateUndoButton();
+            return;
+        }
+        currentBoard = snapshot.board;
+        System.arraycopy(snapshot.clues, 0, clueCells, 0, clueCells.length);
+        showBoard(currentBoard);
+        persistBoard();
+        updateUndoButton();
+    }
+
+    private void pushHistory() {
+        boardHistory.push(currentBoard, clueCells);
+        updateUndoButton();
+    }
+
+    private void updateUndoButton() {
+        binding.btnUndo.setEnabled(boardHistory.canUndo());
     }
 
     private void startCapture() {
@@ -303,6 +331,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void applyRecognizedBoard(@NonNull String board) {
+        pushHistory();
         currentBoard = board;
         markCluesFromBoard(board);
         showBoard(currentBoard);
@@ -345,6 +374,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setCellValue(int stringIndex, char value) {
+        pushHistory();
         currentBoard = withCellValue(currentBoard, stringIndex, value);
         // Manual digit → clue; manual clear → non-clue.
         clueCells[stringIndex] = value >= '1' && value <= '9';
@@ -393,6 +423,7 @@ public class MainActivity extends AppCompatActivity {
                     return;
                 }
                 if (!solutions.isEmpty()) {
+                    pushHistory();
                     // Keep clueCells as-is so given/edited clues stay bold after solving.
                     currentBoard = solutions.get(0);
                     showBoard(currentBoard);
@@ -434,6 +465,7 @@ public class MainActivity extends AppCompatActivity {
         binding.btnCapture.setEnabled(enable);
         binding.btnClear.setEnabled(enable);
         binding.btnSolve.setEnabled(enable);
+        binding.btnUndo.setEnabled(enable && boardHistory.canUndo());
     }
 
     private void showBoard(@NonNull String board) {

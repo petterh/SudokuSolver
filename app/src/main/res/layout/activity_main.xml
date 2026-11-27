@@ -116,5 +116,20 @@
                 android:drawableStart="@android:drawable/ic_media_play"
                 android:text="@string/solve" />
         </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:paddingTop="4dp">
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btn_undo"
+                style="@style/button"
+                android:drawableStart="@android:drawable/ic_menu_revert"
+                android:enabled="false"
+                android:text="@string/undo" />
+        </LinearLayout>
     </LinearLayout>
 </LinearLayout>
