@@ -79,7 +79,6 @@ public final class SudokuBoardRecognizer {
 
             final boolean recycleExtracted = extracted != null;
             final Bitmap ocrInput = recycleExtracted ? extracted : bitmap;
-            final boolean useFullFrameMapping = recycleExtracted;
 
             processBitmap(ocrInput)
                     .addOnSuccessListener(executor, text -> {
@@ -88,10 +87,11 @@ public final class SudokuBoardRecognizer {
                                     collectDigitHits(text),
                                     ocrInput.getWidth(),
                                     ocrInput.getHeight());
-                            String board = useFullFrameMapping
-                                    ? boardFromHitsFullFrame(
-                                            hits, ocrInput.getWidth(), ocrInput.getHeight())
-                                    : boardFromHits(hits);
+                            // Fit the 9×9 grid to digit centers — not the full bitmap.
+                            // Warped frames often keep a thick outer border and uneven
+                            // padding; full-frame binning shifts middle digits (e.g. the
+                            // top-row 2 on good-image.jpg) into the neighbouring cell.
+                            String board = boardFromHits(hits);
                             if (countClues(board) == 0) {
                                 callback.onFailure(
                                         new IllegalStateException("No digits recognized in the photo"));
@@ -130,19 +130,20 @@ public final class SudokuBoardRecognizer {
     }
 
     /**
-     * Map digits using the full image as the Sudoku square (after perspective warp).
+     * Map digits using the full image as the Sudoku square. Prefer {@link #boardFromHits}
+     * after a warp — full-frame binning is sensitive to border padding.
      */
     @VisibleForTesting
     @NonNull
     static String boardFromHitsFullFrame(@NonNull List<DigitHit> hits, int width, int height) {
-        // Larger inset discards border glyphs that slipped into a slightly oversized warp.
         float insetX = width / (Board.DIM * 12f);
         float insetY = height / (Board.DIM * 12f);
         return mapHitsToBoard(hits, insetX, insetY, width - insetX, height - insetY);
     }
 
     /**
-     * Fallback when board extraction fails: fit the grid to the digit cluster.
+     * Fit the 9×9 grid to the digit cluster (with half-cell padding).
+     * Works for warped boards and for the no-extract fallback.
      */
     @VisibleForTesting
     @NonNull
@@ -167,6 +168,7 @@ public final class SudokuBoardRecognizer {
 
         float width = Math.max(maxX - minX, 1f);
         float height = Math.max(maxY - minY, 1f);
+        // Half a cell so centers on the rim still land in columns 0 / 8.
         float padX = width / (Board.DIM * 2f);
         float padY = height / (Board.DIM * 2f);
         return mapHitsToBoard(clustered, minX - padX, minY - padY, maxX + padX, maxY + padY);

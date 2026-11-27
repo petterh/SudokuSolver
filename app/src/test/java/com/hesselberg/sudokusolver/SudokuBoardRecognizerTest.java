@@ -31,6 +31,35 @@ public class SudokuBoardRecognizerTest {
     }
 
     @Test
+    public void boardFromHits_rightPadding_keepsTopRowTwoInColumnSix() {
+        // Warped frame is 900px but the printed grid only fills the left ~700px
+        // (thick border / shadow on the right). Full-frame mapping would place the
+        // top-row 2 one cell left; cluster fitting must keep it in column 6 (index 5).
+        float boardSize = 700f;
+        float cell = boardSize / 9f;
+        List<SudokuBoardRecognizer.DigitHit> hits = Arrays.asList(
+                hit('6', 0.5f * cell, 0.5f * cell),
+                hit('7', 1.5f * cell, 0.5f * cell),
+                hit('2', 5.5f * cell, 0.5f * cell),
+                hit('8', 7.5f * cell, 0.5f * cell),
+                hit('4', 8.5f * cell, 0.5f * cell),
+                hit('8', 0.5f * cell, 1.5f * cell),
+                hit('1', 8.5f * cell, 1.5f * cell),
+                hit('9', 0.5f * cell, 8.5f * cell),
+                hit('7', 5.5f * cell, 8.5f * cell)
+        );
+
+        // Full-frame binning on a padded warp shifts that 2 one cell left — cluster fit must not.
+        assertEquals('2', SudokuBoardRecognizer.boardFromHitsFullFrame(hits, 900, 900).charAt(0 * 9 + 4));
+
+        String fitted = SudokuBoardRecognizer.boardFromHits(hits);
+        assertEquals('2', fitted.charAt(0 * 9 + 5));
+        assertEquals(' ', fitted.charAt(0 * 9 + 4));
+        assertEquals('6', fitted.charAt(0 * 9 + 0));
+        assertEquals('4', fitted.charAt(0 * 9 + 8));
+    }
+
+    @Test
     public void boardFromHits_emptyYieldsBlankBoard() {
         String board = SudokuBoardRecognizer.boardFromHits(List.of());
         assertEquals(81, board.length());
