@@ -150,30 +150,45 @@ public class Board {
         return true;
     }
 
-    public boolean solve(List<String> solutions) {
-        return solve(solutions, 0);
+    /** Finds the first solution (if any) and appends it to {@code solutions}. */
+    public boolean solve(@NonNull List<String> solutions) {
+        return solve(solutions, 1);
     }
 
-    private boolean solve(List<String> solutions, int start) {
+    /**
+     * Collects up to {@code maxSolutions} complete boards into {@code solutions}.
+     * Useful to detect underdetermined puzzles (e.g. after OCR missed a clue).
+     *
+     * @return true if at least one solution was found
+     */
+    public boolean solve(@NonNull List<String> solutions, int maxSolutions) {
+        if (maxSolutions < 1) {
+            throw new IllegalArgumentException("maxSolutions must be >= 1");
+        }
+        collectSolutions(solutions, 0, maxSolutions);
+        return !solutions.isEmpty();
+    }
+
+    /**
+     * @return true when enough solutions have been collected and search should stop
+     */
+    private boolean collectSolutions(@NonNull List<String> solutions, int start, int maxSolutions) {
         int i = findEmptyCell(start);
         if (i == ALL_CELLS_TAKEN) {
-            boolean acceptable = isAcceptable();
-            if (acceptable) {
+            if (isAcceptable()) {
                 solutions.add(toString());
             }
-
-            return acceptable;
+            return solutions.size() >= maxSolutions;
         }
 
         for (int j = 0; j < DIM; j++) {
             fields[i].setValue((char) ('1' + j));
-            if (isAcceptable(i) && solve(solutions, i)) {
+            if (isAcceptable(i) && collectSolutions(solutions, i, maxSolutions)) {
                 return true;
             }
         }
 
         fields[i].setValue(' ');
-
         return false;
     }
 

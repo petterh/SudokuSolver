@@ -349,8 +349,9 @@ public class MainActivity extends AppCompatActivity {
         enableButtons(false);
         final String boardToSolve = currentBoard;
         backgroundExecutor.execute(() -> {
-            List<String> solutions = new ArrayList<>(1);
-            new Board(boardToSolve).solve(solutions);
+            // Cap at 2 so we can warn when OCR left the puzzle underdetermined.
+            List<String> solutions = new ArrayList<>(2);
+            new Board(boardToSolve).solve(solutions, 2);
             runOnUiThread(() -> {
                 if (isFinishing() || isDestroyed()) {
                     return;
@@ -359,6 +360,10 @@ public class MainActivity extends AppCompatActivity {
                     // Keep clueCells as-is so given/edited clues stay bold after solving.
                     currentBoard = solutions.get(0);
                     showBoard(currentBoard);
+                    if (solutions.size() > 1) {
+                        Toast.makeText(this, R.string.solve_multiple_solutions, Toast.LENGTH_LONG)
+                                .show();
+                    }
                 } else {
                     Toast.makeText(this, R.string.no_solution, Toast.LENGTH_SHORT).show();
                 }

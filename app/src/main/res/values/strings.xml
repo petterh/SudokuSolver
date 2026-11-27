@@ -7,6 +7,7 @@
     <string name="no_solution">No solution found</string>
     <string name="solve_has_conflicts">Fix conflicting digits before solving.</string>
     <string name="solve_empty_board">Add some clues before solving.</string>
+    <string name="solve_multiple_solutions">More than one solution — a clue may be missing from the photo.</string>
     <string name="capture">Capture</string>
     <string name="capture_source_title">Load puzzle photo</string>
     <string name="capture_source_camera">Camera</string>

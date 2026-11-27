@@ -100,6 +100,37 @@ public class BoardTest {
     }
 
     @Test
+    public void solve_uniqueSample_staysUniqueWhenLookingForTwo() {
+        List<String> solutions = new ArrayList<>(2);
+        assertTrue(new Board(SampleBoards.SUDOKU_SAMPLE).solve(solutions, 2));
+        assertEquals(1, solutions.size());
+        assertEquals(SOLUTION, solutions.get(0));
+    }
+
+    @Test(timeout = 10_000)
+    public void solve_underdetermined_findsTwoSolutions() {
+        // Drop the last several clues from the unique sample so more than one
+        // completion exists; search stops as soon as two are found.
+        char[] clues = SampleBoards.SUDOKU_SAMPLE.toCharArray();
+        int cleared = 0;
+        for (int i = clues.length - 1; i >= 0 && cleared < 8; i--) {
+            if (clues[i] >= '1' && clues[i] <= '9') {
+                clues[i] = ' ';
+                cleared++;
+            }
+        }
+        List<String> solutions = new ArrayList<>(2);
+        assertTrue(new Board(new String(clues)).solve(solutions, 2));
+        assertEquals(2, solutions.size());
+        assertFalse(solutions.get(0).equals(solutions.get(1)));
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void solve_rejectsNonPositiveLimit() {
+        new Board(SampleBoards.SUDOKU_SAMPLE).solve(new ArrayList<>(), 0);
+    }
+
+    @Test
     public void convertToTextViewIndex() {
         assertEquals(0, Board.convertToTextViewIndex(0));
         assertEquals(18, Board.convertToTextViewIndex(6));
