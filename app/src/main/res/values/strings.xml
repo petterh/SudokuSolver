@@ -9,4 +9,8 @@
     <string name="capture_cancel">Cancel</string>
     <string name="camera_permission_denied">Camera permission is required to capture a puzzle.</string>
     <string name="camera_unavailable">No camera app is available on this device.</string>
+    <string name="recognizing_board">Reading puzzle…</string>
+    <string name="recognition_failed">Could not read a Sudoku board from that photo. Try a clearer, straight-on shot.</string>
+    <string name="recognition_invalid">Recognized digits conflict with Sudoku rules. Showing them anyway so you can edit.</string>
+    <string name="recognition_success">Loaded %1$d clues from the photo.</string>
 </resources>

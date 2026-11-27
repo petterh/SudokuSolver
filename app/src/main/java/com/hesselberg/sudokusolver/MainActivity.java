@@ -40,9 +40,10 @@ public class MainActivity extends AppCompatActivity {
             "4  2  73 ";
 
     private ActivityMainBinding binding;
-    private final ExecutorService solverExecutor = Executors.newSingleThreadExecutor();
+    private final ExecutorService backgroundExecutor = Executors.newSingleThreadExecutor();
+    private final SudokuBoardRecognizer boardRecognizer = new SudokuBoardRecognizer();
 
-    /** Puzzle currently shown / solved. Capture confirm still loads {@link #TEST_BOARD}. */
+    /** Puzzle currently shown / solved. */
     private String currentBoard = TEST_BOARD;
 
     private final ActivityResultLauncher<String> requestCameraPermission =
@@ -80,7 +81,8 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
-        solverExecutor.shutdownNow();
+        backgroundExecutor.shutdownNow();
+        boardRecognizer.close();
         super.onDestroy();
     }
 
@@ -109,25 +111,60 @@ public class MainActivity extends AppCompatActivity {
         new MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.capture_preview_title)
                 .setView(content)
-                .setPositiveButton(R.string.capture_confirm, (dialog, which) -> applyCapturedPuzzlePlaceholder())
+                .setPositiveButton(R.string.capture_confirm, (dialog, which) -> recognizeCapturedBoard(bitmap))
                 .setNeutralButton(R.string.capture_retake, (dialog, which) -> launchCamera())
                 .setNegativeButton(R.string.capture_cancel, null)
                 .show();
     }
 
     /**
-     * Milestone 1: after the user confirms a photo, load the hard-coded puzzle.
-     * Later milestones will OCR the bitmap into an 81-character board string instead.
+     * Milestone 2: OCR the confirmed photo into an 81-character board and display it.
      */
-    private void applyCapturedPuzzlePlaceholder() {
-        currentBoard = TEST_BOARD;
+    private void recognizeCapturedBoard(@NonNull Bitmap bitmap) {
+        enableButtons(false);
+        Toast.makeText(this, R.string.recognizing_board, Toast.LENGTH_SHORT).show();
+
+        boardRecognizer.recognize(bitmap, backgroundExecutor, new SudokuBoardRecognizer.Callback() {
+            @Override
+            public void onSuccess(@NonNull String board) {
+                runOnUiThread(() -> {
+                    if (isFinishing() || isDestroyed()) {
+                        return;
+                    }
+                    applyRecognizedBoard(board);
+                    enableButtons(true);
+                });
+            }
+
+            @Override
+            public void onFailure(@NonNull Exception error) {
+                runOnUiThread(() -> {
+                    if (isFinishing() || isDestroyed()) {
+                        return;
+                    }
+                    Toast.makeText(MainActivity.this, R.string.recognition_failed, Toast.LENGTH_LONG).show();
+                    enableButtons(true);
+                });
+            }
+        });
+    }
+
+    private void applyRecognizedBoard(@NonNull String board) {
+        currentBoard = board;
         showBoard(currentBoard, true);
+
+        int clues = SudokuBoardRecognizer.countClues(board);
+        Toast.makeText(this, getString(R.string.recognition_success, clues), Toast.LENGTH_SHORT).show();
+
+        if (!new Board(board).cluesAreConsistent()) {
+            Toast.makeText(this, R.string.recognition_invalid, Toast.LENGTH_LONG).show();
+        }
     }
 
     private void solveBoard() {
         enableButtons(false);
         final String boardToSolve = currentBoard;
-        solverExecutor.execute(() -> {
+        backgroundExecutor.execute(() -> {
             List<String> solutions = new ArrayList<>(1);
             new Board(boardToSolve).solve(solutions);
             runOnUiThread(() -> {
@@ -182,6 +219,8 @@ public class MainActivity extends AppCompatActivity {
             if (setBold && ch[0] != ' ') {
                 textView.setTypeface(null, Typeface.BOLD);
                 textView.setTextColor(0xff000000);
+            } else if (!setBold) {
+                textView.setTypeface(null, Typeface.NORMAL);
             }
         }
     }

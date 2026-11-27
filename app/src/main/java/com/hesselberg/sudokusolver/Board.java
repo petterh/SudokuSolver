@@ -50,12 +50,16 @@ public class Board {
     }
 
     private boolean isAcceptable() {
+        return cluesAreConsistent();
+    }
+
+    /** True when no digit is duplicated in any row, column, or block. */
+    public boolean cluesAreConsistent() {
         for (int i = 0; i < DIM; i++) {
-            if (!isAcceptable(i)) {
+            if (!isAcceptable(rows[i]) || !isAcceptable(columns[i]) || !isAcceptable(groups[i])) {
                 return false;
             }
         }
-
         return true;
     }
 
