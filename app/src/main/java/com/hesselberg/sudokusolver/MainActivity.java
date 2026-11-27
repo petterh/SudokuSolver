@@ -3,7 +3,9 @@ package com.hesselberg.sudokusolver;
 import android.Manifest;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Typeface;
+import android.net.Uri;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -15,12 +17,18 @@ import android.widget.Toast;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
+import androidx.core.content.FileProvider;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.hesselberg.sudokusolver.databinding.ActivityMainBinding;
 
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -39,12 +47,19 @@ public class MainActivity extends AppCompatActivity {
             "95   2   " +
             "2       1";
 
+    private static final int CAPTURE_MAX_EDGE_PX = 1600;
+
     private ActivityMainBinding binding;
     private final ExecutorService backgroundExecutor = Executors.newSingleThreadExecutor();
     private final SudokuBoardRecognizer boardRecognizer = new SudokuBoardRecognizer();
 
     /** Puzzle currently shown / solved. */
     private String currentBoard = TEST_BOARD;
+    /** True for cells treated as given clues (shown bold). */
+    private final boolean[] clueCells = new boolean[Board.DIM * Board.DIM];
+
+    private Uri captureUri;
+    private File captureFile;
 
     private final ActivityResultLauncher<String> requestCameraPermission =
             registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
@@ -55,10 +70,17 @@ public class MainActivity extends AppCompatActivity {
                 }
             });
 
-    private final ActivityResultLauncher<Void> takePicturePreview =
-            registerForActivityResult(new ActivityResultContracts.TakePicturePreview(), bitmap -> {
+    private final ActivityResultLauncher<Uri> takePicture =
+            registerForActivityResult(new ActivityResultContracts.TakePicture(), success -> {
+                if (!success || captureUri == null) {
+                    return;
+                }
+                Bitmap bitmap = loadCaptureBitmap(captureUri);
+                deleteCaptureFile();
                 if (bitmap != null) {
                     showCaptureConfirmDialog(bitmap);
+                } else {
+                    Toast.makeText(this, R.string.capture_failed, Toast.LENGTH_LONG).show();
                 }
             });
 
@@ -70,12 +92,12 @@ public class MainActivity extends AppCompatActivity {
         binding.btnCapture.setOnClickListener(v -> startCapture());
         binding.btnSolve.setOnClickListener(v -> solveBoard());
 
+        markCluesFromBoard(currentBoard);
         List<TextView> textViews = getTextViews();
         int count = 0;
         for (TextView textView : textViews) {
-            final int i = Board.convertToStringIndex(count++);
-            textView.setOnClickListener(v ->
-                    Toast.makeText(MainActivity.this, "Edit " + i, Toast.LENGTH_SHORT).show());
+            final int stringIndex = Board.convertToStringIndex(count++);
+            textView.setOnClickListener(v -> editCell(stringIndex));
         }
     }
 
@@ -83,6 +105,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onDestroy() {
         backgroundExecutor.shutdownNow();
         boardRecognizer.close();
+        deleteCaptureFile();
         super.onDestroy();
     }
 
@@ -97,10 +120,67 @@ public class MainActivity extends AppCompatActivity {
 
     private void launchCamera() {
         try {
-            takePicturePreview.launch(null);
+            captureUri = createCaptureUri();
+            takePicture.launch(captureUri);
         } catch (Exception e) {
             Toast.makeText(this, R.string.camera_unavailable, Toast.LENGTH_LONG).show();
         }
+    }
+
+    @NonNull
+    private Uri createCaptureUri() throws IOException {
+        File dir = new File(getCacheDir(), "capture");
+        if (!dir.exists() && !dir.mkdirs()) {
+            throw new IOException("Unable to create capture directory");
+        }
+        captureFile = File.createTempFile("sudoku_", ".jpg", dir);
+        return FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", captureFile);
+    }
+
+    @Nullable
+    private Bitmap loadCaptureBitmap(@NonNull Uri uri) {
+        try {
+            BitmapFactory.Options bounds = new BitmapFactory.Options();
+            bounds.inJustDecodeBounds = true;
+            try (InputStream in = getContentResolver().openInputStream(uri)) {
+                if (in == null) {
+                    return null;
+                }
+                BitmapFactory.decodeStream(in, null, bounds);
+            }
+
+            BitmapFactory.Options opts = new BitmapFactory.Options();
+            opts.inSampleSize = calculateInSampleSize(bounds, CAPTURE_MAX_EDGE_PX, CAPTURE_MAX_EDGE_PX);
+            opts.inPreferredConfig = Bitmap.Config.ARGB_8888;
+            try (InputStream in = getContentResolver().openInputStream(uri)) {
+                if (in == null) {
+                    return null;
+                }
+                return BitmapFactory.decodeStream(in, null, opts);
+            }
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    private static int calculateInSampleSize(
+            @NonNull BitmapFactory.Options options, int maxWidth, int maxHeight) {
+        int height = options.outHeight;
+        int width = options.outWidth;
+        int inSampleSize = 1;
+        while ((height / inSampleSize) > maxHeight || (width / inSampleSize) > maxWidth) {
+            inSampleSize *= 2;
+        }
+        return Math.max(1, inSampleSize);
+    }
+
+    private void deleteCaptureFile() {
+        if (captureFile != null) {
+            //noinspection ResultOfMethodCallIgnored
+            captureFile.delete();
+            captureFile = null;
+        }
+        captureUri = null;
     }
 
     private void showCaptureConfirmDialog(@NonNull Bitmap bitmap) {
@@ -117,9 +197,6 @@ public class MainActivity extends AppCompatActivity {
                 .show();
     }
 
-    /**
-     * Milestone 2: OCR the confirmed photo into an 81-character board and display it.
-     */
     private void recognizeCapturedBoard(@NonNull Bitmap bitmap) {
         enableButtons(false);
         Toast.makeText(this, R.string.recognizing_board, Toast.LENGTH_SHORT).show();
@@ -151,13 +228,52 @@ public class MainActivity extends AppCompatActivity {
 
     private void applyRecognizedBoard(@NonNull String board) {
         currentBoard = board;
-        showBoard(currentBoard, true);
+        markCluesFromBoard(board);
+        showBoard(currentBoard);
 
         int clues = SudokuBoardRecognizer.countClues(board);
         Toast.makeText(this, getString(R.string.recognition_success, clues), Toast.LENGTH_SHORT).show();
 
         if (!new Board(board).cluesAreConsistent()) {
             Toast.makeText(this, R.string.recognition_invalid, Toast.LENGTH_LONG).show();
+        }
+    }
+
+    /**
+     * Milestone 3: tap a cell to cycle blank → 1..9 → blank and update {@link #currentBoard}.
+     */
+    private void editCell(int stringIndex) {
+        char[] chars = currentBoard.toCharArray();
+        chars[stringIndex] = nextClueValue(chars[stringIndex]);
+        currentBoard = new String(chars);
+        clueCells[stringIndex] = chars[stringIndex] != ' ';
+
+        List<TextView> textViews = getTextViews();
+        int textViewIndex = Board.convertToTextViewIndex(stringIndex);
+        applyCellVisual(textViews.get(textViewIndex), chars[stringIndex], clueCells[stringIndex]);
+    }
+
+    @VisibleForTesting
+    static char nextClueValue(char current) {
+        if (current < '1' || current > '9') {
+            return '1';
+        }
+        if (current == '9') {
+            return ' ';
+        }
+        return (char) (current + 1);
+    }
+
+    private void markCluesFromBoard(@NonNull String board) {
+        for (int i = 0; i < clueCells.length; i++) {
+            char c = i < board.length() ? board.charAt(i) : ' ';
+            clueCells[i] = c >= '1' && c <= '9';
+        }
+    }
+
+    private void clearClueMarks() {
+        for (int i = 0; i < clueCells.length; i++) {
+            clueCells[i] = false;
         }
     }
 
@@ -173,7 +289,8 @@ public class MainActivity extends AppCompatActivity {
                 }
                 if (!solutions.isEmpty()) {
                     currentBoard = solutions.get(0);
-                    showBoard(currentBoard, false);
+                    clearClueMarks();
+                    showBoard(currentBoard);
                 } else {
                     Toast.makeText(this, "No solution found", Toast.LENGTH_SHORT).show();
                 }
@@ -208,20 +325,22 @@ public class MainActivity extends AppCompatActivity {
         binding.btnSolve.setEnabled(enable);
     }
 
-    private void showBoard(@NonNull String solution, boolean setBold) {
+    private void showBoard(@NonNull String board) {
         List<TextView> textViews = getTextViews();
         for (int i = 0; i < Board.DIM * Board.DIM; i++) {
             int textViewIndex = Board.convertToTextViewIndex(i);
-            TextView textView = textViews.get(textViewIndex);
-            char[] ch = new char[1];
-            ch[0] = solution.charAt(i);
-            textView.setText(ch, 0, 1);
-            if (setBold && ch[0] != ' ') {
-                textView.setTypeface(null, Typeface.BOLD);
-                textView.setTextColor(0xff000000);
-            } else if (!setBold) {
-                textView.setTypeface(null, Typeface.NORMAL);
-            }
+            applyCellVisual(textViews.get(textViewIndex), board.charAt(i), clueCells[i]);
+        }
+    }
+
+    private void applyCellVisual(@NonNull TextView textView, char value, boolean clue) {
+        char[] ch = new char[]{value};
+        textView.setText(ch, 0, 1);
+        if (clue && value != ' ') {
+            textView.setTypeface(null, Typeface.BOLD);
+            textView.setTextColor(0xff000000);
+        } else {
+            textView.setTypeface(null, Typeface.NORMAL);
         }
     }
 }
