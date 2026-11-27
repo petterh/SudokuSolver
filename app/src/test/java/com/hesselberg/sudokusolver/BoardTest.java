@@ -11,78 +11,71 @@ import static org.junit.Assert.assertTrue;
 
 public class BoardTest {
 
-    private static final String TEST_BOARD =
-            "       1 " +
-            "8        " +
-            "    67  2" +
-            " 6  82  3" +
-            "9  4 5   " +
-            "     3 81" +
-            "3  5     " +
-            "  5   1 6" +
-            "4  2  73 ";
-
     private static final String SOLUTION =
-            "679324518" +
-            "823159674" +
-            "154867392" +
-            "761982453" +
-            "938415267" +
-            "542673981" +
-            "317546829" +
-            "295738146" +
-            "486291735";
+            "725643918" +
+            "613897425" +
+            "489521376" +
+            "862139754" +
+            "591478263" +
+            "347265189" +
+            "178954632" +
+            "956312847" +
+            "234786591";
 
+    /** Solution with one cell wrong. */
     private static final String ERROR1 =
-            "679324518" +
-            "823159674" +
-            "154867392" +
-            "761982453" +
-            "938415261" +
-            "542673981" +
-            "317546829" +
-            "295738146" +
-            "486291735";
+            "725643918" +
+            "613897425" +
+            "489521376" +
+            "862139754" +
+            "591478261" +
+            "347265189" +
+            "178954632" +
+            "956312847" +
+            "234786591";
 
+    /** Sample with duplicate 1 in row 1. */
     private static final String ERROR2 =
-            "       11" +
-            "8        " +
-            "    67  2" +
-            " 6  82  3" +
-            "9  4 5   " +
-            "     3 81" +
-            "3  5     " +
-            "  5   1 6" +
-            "4  2  73 ";
+            "     3 11" +
+            "6     425" +
+            "   5     " +
+            "  2 3   4" +
+            " 91  8 6 " +
+            "         " +
+            "     463 " +
+            "95   2   " +
+            "2       1";
 
+    /** Sample with conflicting 5 in row 3. */
     private static final String ERROR3 =
-            "       1 " +
-            "8        " +
-            " 8  67  2" +
-            " 6  82  3" +
-            "9  4 5   " +
-            "     3 81" +
-            "3  5     " +
-            "  5   1 6" +
-            "4  2  73 ";
+            "     3 18" +
+            "6     425" +
+            "  55     " +
+            "  2 3   4" +
+            " 91  8 6 " +
+            "         " +
+            "     463 " +
+            "95   2   " +
+            "2       1";
 
+    /** Sample with duplicate 2 in row 8. */
     private static final String ERROR4 =
-            "       1 " +
-            "8        " +
-            "    67  2" +
-            " 6  82  3" +
-            "9  4 5   " +
-            "     3 81" +
-            "3  5     " +
-            "  5    16" +
-            "4  2  73 ";
+            "     3 18" +
+            "6     425" +
+            "   5     " +
+            "  2 3   4" +
+            " 91  8 6 " +
+            "         " +
+            "     463 " +
+            "95   22  " +
+            "2       1";
 
     @Test
     public void verify() {
-        assertEquals(SOLUTION.length(), TEST_BOARD.length());
+        assertEquals(SOLUTION.length(), SampleBoards.SUDOKU_SAMPLE.length());
 
-        for (int i = 0; i < TEST_BOARD.length(); i++) {
-            char test = TEST_BOARD.charAt(i);
+        for (int i = 0; i < SampleBoards.SUDOKU_SAMPLE.length(); i++) {
+            char test = SampleBoards.SUDOKU_SAMPLE.charAt(i);
             if (test != ' ') {
                 char solution = SOLUTION.charAt(i);
                 assertEquals(solution, test);
@@ -92,7 +85,7 @@ public class BoardTest {
 
     @Test
     public void solve() {
-        Board board = new Board((TEST_BOARD));
+        Board board = new Board(SampleBoards.SUDOKU_SAMPLE);
         List<String> solutions = new ArrayList<>();
         long start = System.currentTimeMillis();
         assertTrue(board.solve(solutions));
@@ -141,13 +134,13 @@ public class BoardTest {
         assertTrue(new Board(SOLUTION).isAcceptable(0));
         assertFalse(new Board(ERROR1).isAcceptable(8));
         assertFalse(new Board(ERROR2).isAcceptable(0));
-        assertFalse(new Board(ERROR3).isAcceptable(0));
-        assertFalse(new Board(ERROR4).isAcceptable(7));
+        assertFalse(new Board(ERROR3).isAcceptable(20));
+        assertFalse(new Board(ERROR4).isAcceptable(68));
     }
 
     @Test
     public void testToString() {
-        assertEquals(TEST_BOARD, new Board(TEST_BOARD).toString());
+        assertEquals(SampleBoards.SUDOKU_SAMPLE, new Board(SampleBoards.SUDOKU_SAMPLE).toString());
         assertEquals(SOLUTION, new Board(SOLUTION).toString());
     }
 }

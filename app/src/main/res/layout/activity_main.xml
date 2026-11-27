@@ -14,40 +14,79 @@
         android:layout_marginTop="?attr/actionBarSize"
         android:gravity="center_horizontal"
         android:orientation="vertical"
-        android:padding="30dp">
+        android:paddingHorizontal="16dp"
+        android:paddingTop="24dp"
+        android:paddingBottom="24dp">
 
         <LinearLayout
             android:id="@+id/board"
-            style="@style/digit_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
             android:background="@drawable/group_border"
             android:orientation="vertical"
             android:padding="1dp">
 
-            <LinearLayout style="@style/digit_row">
+            <LinearLayout style="@style/board_band">
 
-                <include layout="@layout/group" />
+                <include
+                    layout="@layout/group"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1" />
 
-                <include layout="@layout/group" />
+                <include
+                    layout="@layout/group"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1" />
 
-                <include layout="@layout/group" />
+                <include
+                    layout="@layout/group"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1" />
             </LinearLayout>
 
-            <LinearLayout style="@style/digit_row">
+            <LinearLayout style="@style/board_band">
 
-                <include layout="@layout/group" />
+                <include
+                    layout="@layout/group"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1" />
 
-                <include layout="@layout/group" />
+                <include
+                    layout="@layout/group"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1" />
 
-                <include layout="@layout/group" />
+                <include
+                    layout="@layout/group"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1" />
             </LinearLayout>
 
-            <LinearLayout style="@style/digit_row">
+            <LinearLayout style="@style/board_band">
 
-                <include layout="@layout/group" />
+                <include
+                    layout="@layout/group"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1" />
 
-                <include layout="@layout/group" />
+                <include
+                    layout="@layout/group"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1" />
 
-                <include layout="@layout/group" />
+                <include
+                    layout="@layout/group"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1" />
             </LinearLayout>
         </LinearLayout>
 

@@ -20,11 +20,11 @@ import java.util.List;
 import java.util.concurrent.Executor;
 
 /**
- * Milestone 2: OCR a photo of a Sudoku grid into the 81-character board format
- * used by {@link Board} (digits {@code '1'}–{@code '9'} or space).
+ * OCR a photo of a Sudoku grid into the 81-character board format used by {@link Board}
+ * (digits {@code '1'}–{@code '9'} or space).
  *
- * <p>Assumes a fairly straight-on photo. Digits are mapped into a 9×9 grid using
- * their bounding-box centers, fitted to the bounds of all detected digits.
+ * <p>Prefers an OpenCV board extract (perspective-warped square). Digits are then mapped
+ * onto a fixed 9×9 grid covering that square, so outside page noise never enters OCR.
  */
 public final class SudokuBoardRecognizer {
 
@@ -40,11 +40,27 @@ public final class SudokuBoardRecognizer {
         final char digit;
         final float centerX;
         final float centerY;
+        final float area;
 
         DigitHit(char digit, float centerX, float centerY) {
+            this(digit, centerX, centerY, 1f);
+        }
+
+        DigitHit(char digit, float centerX, float centerY, float area) {
             this.digit = digit;
             this.centerX = centerX;
             this.centerY = centerY;
+            this.area = Math.max(area, 1f);
+        }
+    }
+
+    private static final class CellCandidate {
+        final char digit;
+        final float distSq;
+
+        CellCandidate(char digit, float distSq) {
+            this.digit = digit;
+            this.distSq = distSq;
         }
     }
 
@@ -52,21 +68,52 @@ public final class SudokuBoardRecognizer {
             TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
 
     public void recognize(@NonNull Bitmap bitmap, @NonNull Executor executor, @NonNull Callback callback) {
-        InputImage image = InputImage.fromBitmap(bitmap, 0);
-        Task<Text> task = textRecognizer.process(image);
-        task.addOnSuccessListener(executor, text -> {
+        executor.execute(() -> {
+            Bitmap extracted = null;
             try {
-                String board = boardFromText(text);
-                if (countClues(board) == 0) {
-                    callback.onFailure(new IllegalStateException("No digits recognized in the photo"));
-                    return;
-                }
-                callback.onSuccess(board);
+                extracted = SudokuBoardExtractor.extractBoard(bitmap);
             } catch (RuntimeException e) {
                 callback.onFailure(e);
+                return;
             }
+
+            final boolean recycleExtracted = extracted != null;
+            final Bitmap ocrInput = recycleExtracted ? extracted : bitmap;
+            final boolean useFullFrameMapping = recycleExtracted;
+
+            processBitmap(ocrInput)
+                    .addOnSuccessListener(executor, text -> {
+                        try {
+                            List<DigitHit> hits = collectDigitHits(text);
+                            String board = useFullFrameMapping
+                                    ? boardFromHitsFullFrame(
+                                            hits, ocrInput.getWidth(), ocrInput.getHeight())
+                                    : boardFromHits(hits);
+                            if (countClues(board) == 0) {
+                                callback.onFailure(
+                                        new IllegalStateException("No digits recognized in the photo"));
+                            } else {
+                                callback.onSuccess(board);
+                            }
+                        } catch (RuntimeException e) {
+                            callback.onFailure(e);
+                        } finally {
+                            if (recycleExtracted && !ocrInput.isRecycled()) {
+                                ocrInput.recycle();
+                            }
+                        }
+                    })
+                    .addOnFailureListener(executor, error -> {
+                        if (recycleExtracted && !ocrInput.isRecycled()) {
+                            ocrInput.recycle();
+                        }
+                        callback.onFailure(error);
+                    });
         });
-        task.addOnFailureListener(executor, callback::onFailure);
+    }
+
+    private Task<Text> processBitmap(@NonNull Bitmap bitmap) {
+        return textRecognizer.process(InputImage.fromBitmap(bitmap, 0));
     }
 
     public void close() {
@@ -76,17 +123,30 @@ public final class SudokuBoardRecognizer {
     @VisibleForTesting
     @NonNull
     static String boardFromText(@NonNull Text text) {
-        List<DigitHit> hits = collectDigitHits(text);
-        return boardFromHits(hits);
+        return boardFromHits(collectDigitHits(text));
     }
 
+    /**
+     * Map digits using the full image as the Sudoku square (after perspective warp).
+     */
+    @VisibleForTesting
+    @NonNull
+    static String boardFromHitsFullFrame(@NonNull List<DigitHit> hits, int width, int height) {
+        float insetX = width / (Board.DIM * 20f);
+        float insetY = height / (Board.DIM * 20f);
+        return mapHitsToBoard(hits, insetX, insetY, width - insetX, height - insetY);
+    }
+
+    /**
+     * Fallback when board extraction fails: fit the grid to the digit cluster.
+     */
     @VisibleForTesting
     @NonNull
     static String boardFromHits(@NonNull List<DigitHit> hits) {
-        char[] cells = new char[Board.DIM * Board.DIM];
-        Arrays.fill(cells, ' ');
         if (hits.isEmpty()) {
-            return new String(cells);
+            char[] empty = new char[Board.DIM * Board.DIM];
+            Arrays.fill(empty, ' ');
+            return new String(empty);
         }
 
         float minX = Float.MAX_VALUE;
@@ -100,24 +160,41 @@ public final class SudokuBoardRecognizer {
             maxY = Math.max(maxY, hit.centerY);
         }
 
-        // Pad so edge digits don't clamp into a single border row/column.
         float width = Math.max(maxX - minX, 1f);
         float height = Math.max(maxY - minY, 1f);
         float padX = width / (Board.DIM * 2f);
         float padY = height / (Board.DIM * 2f);
-        minX -= padX;
-        maxX += padX;
-        minY -= padY;
-        maxY += padY;
-        width = maxX - minX;
-        height = maxY - minY;
+        return mapHitsToBoard(hits, minX - padX, minY - padY, maxX + padX, maxY + padY);
+    }
 
+    @NonNull
+    private static String mapHitsToBoard(
+            @NonNull List<DigitHit> hits, float minX, float minY, float maxX, float maxY) {
+        char[] cells = new char[Board.DIM * Board.DIM];
+        Arrays.fill(cells, ' ');
+        float width = Math.max(maxX - minX, 1f);
+        float height = Math.max(maxY - minY, 1f);
+
+        CellCandidate[] best = new CellCandidate[Board.DIM * Board.DIM];
         for (DigitHit hit : hits) {
             int col = clamp((int) ((hit.centerX - minX) / width * Board.DIM), 0, Board.DIM - 1);
             int row = clamp((int) ((hit.centerY - minY) / height * Board.DIM), 0, Board.DIM - 1);
-            cells[row * Board.DIM + col] = hit.digit;
+            float cellCenterX = minX + (col + 0.5f) * width / Board.DIM;
+            float cellCenterY = minY + (row + 0.5f) * height / Board.DIM;
+            float dx = hit.centerX - cellCenterX;
+            float dy = hit.centerY - cellCenterY;
+            float distSq = dx * dx + dy * dy;
+            int index = row * Board.DIM + col;
+            if (best[index] == null || distSq < best[index].distSq) {
+                best[index] = new CellCandidate(hit.digit, distSq);
+            }
         }
 
+        for (int i = 0; i < best.length; i++) {
+            if (best[i] != null) {
+                cells[i] = best[i].digit;
+            }
+        }
         return new String(cells);
     }
 
@@ -146,32 +223,71 @@ public final class SudokuBoardRecognizer {
         if (raw == null || box == null) {
             return;
         }
-        String digits = raw.replaceAll("[^1-9]", "");
+        List<Character> digits = new ArrayList<>();
+        for (int i = 0; i < raw.length(); i++) {
+            Character digit = normalizeSudokuDigit(String.valueOf(raw.charAt(i)));
+            if (digit != null) {
+                digits.add(digit);
+            }
+        }
         if (digits.isEmpty()) {
             return;
         }
-        if (digits.length() == 1) {
-            addDigitHit(hits, digits, box);
+        if (digits.size() == 1) {
+            addDigitHit(hits, String.valueOf(digits.get(0)), box);
             return;
         }
-        // Split a multi-digit element evenly across its bounding box.
-        float slice = box.width() / (float) digits.length();
-        for (int i = 0; i < digits.length(); i++) {
+        float slice = box.width() / (float) digits.size();
+        float sliceArea = Math.max(slice * box.height(), 1f);
+        for (int i = 0; i < digits.size(); i++) {
             float centerX = box.left + slice * (i + 0.5f);
             float centerY = box.exactCenterY();
-            hits.add(new DigitHit(digits.charAt(i), centerX, centerY));
+            hits.add(new DigitHit(digits.get(i), centerX, centerY, sliceArea));
         }
     }
 
     private static void addDigitHit(
             @NonNull List<DigitHit> hits, @Nullable String raw, @Nullable Rect box) {
-        if (raw == null || box == null || raw.isEmpty()) {
+        if (box == null) {
             return;
         }
-        char ch = raw.charAt(0);
-        if (ch >= '1' && ch <= '9') {
-            hits.add(new DigitHit(ch, box.exactCenterX(), box.exactCenterY()));
+        Character digit = normalizeSudokuDigit(raw);
+        if (digit == null) {
+            return;
         }
+        float area = Math.max(box.width(), 1) * Math.max(box.height(), 1);
+        hits.add(new DigitHit(digit, box.exactCenterX(), box.exactCenterY(), area));
+    }
+
+    /**
+     * Map OCR glyphs to Sudoku digits. ML Kit often reads {@code 9} as {@code g}/{@code q}.
+     */
+    @VisibleForTesting
+    @Nullable
+    static Character normalizeSudokuDigit(@Nullable String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String trimmed = raw.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        char ch = trimmed.charAt(0);
+        if (ch >= '1' && ch <= '9') {
+            return ch;
+        }
+        int unicodeDigit = Character.digit(ch, 10);
+        if (unicodeDigit >= 1 && unicodeDigit <= 9) {
+            return (char) ('0' + unicodeDigit);
+        }
+        return switch (Character.toLowerCase(ch)) {
+            case 'g', 'q' -> '9';
+            case 's' -> '5';
+            case 'b' -> '8';
+            case 'z' -> '2';
+            case 'l', 'i', '|' -> '1';
+            default -> null;
+        };
     }
 
     static int countClues(@NonNull String board) {

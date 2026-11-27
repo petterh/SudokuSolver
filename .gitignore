@@ -28,3 +28,7 @@ local.properties
 .idea/.name
 # Keep .idea/gradle.xml and .idea/runConfigurations/ tracked so Run can resolve :app
 
+# VS Code — ignore local editor state; keep shared settings tracked
+.vscode/*
+!.vscode/settings.json
+

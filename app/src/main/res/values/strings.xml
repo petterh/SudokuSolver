@@ -12,5 +12,6 @@
     <string name="recognizing_board">Reading puzzle…</string>
     <string name="recognition_failed">Could not read a Sudoku board from that photo. Try a clearer, straight-on shot.</string>
     <string name="recognition_invalid">Recognized digits conflict with Sudoku rules. Showing them anyway so you can edit.</string>
-    <string name="recognition_success">Loaded %1$d clues from the photo.</string>
+    <string name="recognition_success">Loaded %1$d clues from the photo. Tap cells to fix mistakes.</string>
+    <string name="capture_failed">Could not save or read the photo.</string>
 </resources>
