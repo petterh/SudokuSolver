@@ -6,6 +6,7 @@ import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Matrix;
+import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
@@ -75,7 +76,8 @@ public class MainActivity extends AppCompatActivity {
                     return;
                 }
                 String path = result.getData().getStringExtra(CaptureActivity.EXTRA_PHOTO_PATH);
-                Bitmap bitmap = loadCaptureBitmap(uri);
+                RectF frame = readCaptureFrame(result.getData());
+                Bitmap bitmap = loadCaptureBitmap(uri, frame);
                 deleteCaptureFile(path);
                 if (bitmap != null) {
                     showCaptureConfirmDialog(bitmap);
@@ -124,10 +126,25 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Nullable
-    private Bitmap loadCaptureBitmap(@NonNull Uri uri) {
+    private static RectF readCaptureFrame(@Nullable Intent data) {
+        if (data == null
+                || !data.hasExtra(CaptureActivity.EXTRA_FRAME_LEFT)
+                || !data.hasExtra(CaptureActivity.EXTRA_FRAME_TOP)
+                || !data.hasExtra(CaptureActivity.EXTRA_FRAME_RIGHT)
+                || !data.hasExtra(CaptureActivity.EXTRA_FRAME_BOTTOM)) {
+            return null;
+        }
+        return new RectF(
+                data.getFloatExtra(CaptureActivity.EXTRA_FRAME_LEFT, 0f),
+                data.getFloatExtra(CaptureActivity.EXTRA_FRAME_TOP, 0f),
+                data.getFloatExtra(CaptureActivity.EXTRA_FRAME_RIGHT, 1f),
+                data.getFloatExtra(CaptureActivity.EXTRA_FRAME_BOTTOM, 1f));
+    }
+
+    @Nullable
+    private Bitmap loadCaptureBitmap(@NonNull Uri uri, @Nullable RectF frameNormalized) {
         try {
             // Camera JPEGs often store orientation in EXIF; BitmapFactory ignores it.
-            // TakePicturePreview returned an upright bitmap, which is why OCR was better before.
             int orientation = ExifInterface.ORIENTATION_NORMAL;
             try (InputStream in = getContentResolver().openInputStream(uri)) {
                 if (in != null) {
@@ -159,7 +176,8 @@ public class MainActivity extends AppCompatActivity {
             if (decoded == null) {
                 return null;
             }
-            return applyExifOrientation(decoded, orientation);
+            Bitmap oriented = applyExifOrientation(decoded, orientation);
+            return CaptureCrop.cropToNormalizedFrame(oriented, frameNormalized);
         } catch (IOException e) {
             return null;
         }

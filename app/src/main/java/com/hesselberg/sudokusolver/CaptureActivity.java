@@ -1,8 +1,10 @@
 package com.hesselberg.sudokusolver;
 
 import android.content.Intent;
+import android.graphics.RectF;
 import android.net.Uri;
 import android.os.Bundle;
+import android.util.Log;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -12,6 +14,8 @@ import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ImageCapture;
 import androidx.camera.core.ImageCaptureException;
 import androidx.camera.core.Preview;
+import androidx.camera.core.UseCaseGroup;
+import androidx.camera.core.ViewPort;
 import androidx.camera.lifecycle.ProcessCameraProvider;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
@@ -25,12 +29,18 @@ import java.util.concurrent.ExecutionException;
 
 /**
  * In-app CameraX capture with a square framing overlay for Sudoku boards.
- * Returns a content {@link Uri} to a JPEG in the cache capture folder.
+ * Returns a content {@link Uri} plus normalized overlay bounds for cropping.
  */
 public final class CaptureActivity extends AppCompatActivity {
 
     public static final String EXTRA_PHOTO_URI = "photo_uri";
     public static final String EXTRA_PHOTO_PATH = "photo_path";
+    public static final String EXTRA_FRAME_LEFT = "frame_left";
+    public static final String EXTRA_FRAME_TOP = "frame_top";
+    public static final String EXTRA_FRAME_RIGHT = "frame_right";
+    public static final String EXTRA_FRAME_BOTTOM = "frame_bottom";
+
+    private static final String TAG = "CaptureActivity";
 
     private ActivityCaptureBinding binding;
     @Nullable
@@ -51,7 +61,8 @@ public final class CaptureActivity extends AppCompatActivity {
         });
         binding.btnShutter.setOnClickListener(v -> takePhoto());
 
-        startCamera();
+        // ViewPort is only available after PreviewView has been measured.
+        binding.previewView.post(this::startCamera);
     }
 
     private void startCamera() {
@@ -62,6 +73,7 @@ public final class CaptureActivity extends AppCompatActivity {
                 ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
                 bindCameraUseCases(cameraProvider);
             } catch (ExecutionException | InterruptedException e) {
+                Log.e(TAG, "Camera provider failed", e);
                 Toast.makeText(this, R.string.camera_unavailable, Toast.LENGTH_LONG).show();
                 setResult(RESULT_CANCELED);
                 finish();
@@ -78,11 +90,23 @@ public final class CaptureActivity extends AppCompatActivity {
                 .build();
 
         cameraProvider.unbindAll();
-        cameraProvider.bindToLifecycle(
-                this,
-                CameraSelector.DEFAULT_BACK_CAMERA,
-                preview,
-                imageCapture);
+
+        ViewPort viewPort = binding.previewView.getViewPort();
+        if (viewPort != null) {
+            UseCaseGroup useCaseGroup = new UseCaseGroup.Builder()
+                    .setViewPort(viewPort)
+                    .addUseCase(preview)
+                    .addUseCase(imageCapture)
+                    .build();
+            cameraProvider.bindToLifecycle(
+                    this, CameraSelector.DEFAULT_BACK_CAMERA, useCaseGroup);
+        } else {
+            cameraProvider.bindToLifecycle(
+                    this,
+                    CameraSelector.DEFAULT_BACK_CAMERA,
+                    preview,
+                    imageCapture);
+        }
     }
 
     private void takePhoto() {
@@ -92,6 +116,11 @@ public final class CaptureActivity extends AppCompatActivity {
         }
         capturing = true;
         binding.btnShutter.setEnabled(false);
+
+        final RectF frameNormalized = CaptureCrop.normalizedFrameFromView(
+                binding.frameOverlay.getFrameRect(),
+                binding.previewView.getWidth(),
+                binding.previewView.getHeight());
 
         try {
             captureFile = createCaptureFile();
@@ -117,6 +146,10 @@ public final class CaptureActivity extends AppCompatActivity {
                         Intent data = new Intent().setData(uri);
                         data.putExtra(EXTRA_PHOTO_URI, uri.toString());
                         data.putExtra(EXTRA_PHOTO_PATH, captureFile.getAbsolutePath());
+                        data.putExtra(EXTRA_FRAME_LEFT, frameNormalized.left);
+                        data.putExtra(EXTRA_FRAME_TOP, frameNormalized.top);
+                        data.putExtra(EXTRA_FRAME_RIGHT, frameNormalized.right);
+                        data.putExtra(EXTRA_FRAME_BOTTOM, frameNormalized.bottom);
                         data.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                         setResult(RESULT_OK, data);
                         finish();

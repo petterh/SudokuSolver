@@ -49,6 +49,44 @@ public class SudokuBoardRecognizerTest {
         assertNull(SudokuBoardRecognizer.normalizeSudokuDigit("0"));
     }
 
+    @Test
+    public void filterCellSizedHits_dropsOversizedMarginGlyphs() {
+        // Cell on 900px board ≈ 100px; cell-sized digit ≈ 40x40, title ≈ 200x80.
+        List<SudokuBoardRecognizer.DigitHit> hits = Arrays.asList(
+                new SudokuBoardRecognizer.DigitHit('5', 450f, 450f, 40f * 40f),
+                new SudokuBoardRecognizer.DigitHit('2', 50f, 50f, 200f * 80f)
+        );
+
+        List<SudokuBoardRecognizer.DigitHit> filtered =
+                SudokuBoardRecognizer.filterCellSizedHits(hits, 900, 900);
+
+        assertEquals(1, filtered.size());
+        assertEquals('5', filtered.get(0).digit);
+    }
+
+    @Test
+    public void discardSpatialOutliers_dropsFarMarginDigit() {
+        List<SudokuBoardRecognizer.DigitHit> hits = Arrays.asList(
+                hit('1', 100f, 100f),
+                hit('2', 200f, 100f),
+                hit('3', 300f, 100f),
+                hit('4', 100f, 200f),
+                hit('5', 200f, 200f),
+                hit('6', 300f, 200f),
+                hit('7', 100f, 300f),
+                hit('8', 200f, 300f),
+                hit('9', 900f, 50f) // far margin
+        );
+
+        List<SudokuBoardRecognizer.DigitHit> kept =
+                SudokuBoardRecognizer.discardSpatialOutliers(hits);
+
+        assertEquals(8, kept.size());
+        for (SudokuBoardRecognizer.DigitHit hit : kept) {
+            assertTrue(hit.digit != '9' || hit.centerX < 800f);
+        }
+    }
+
     private static SudokuBoardRecognizer.DigitHit hit(char digit, float col, float row) {
         return new SudokuBoardRecognizer.DigitHit(digit, col, row);
     }

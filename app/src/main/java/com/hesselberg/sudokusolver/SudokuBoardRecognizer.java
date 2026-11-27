@@ -84,7 +84,10 @@ public final class SudokuBoardRecognizer {
             processBitmap(ocrInput)
                     .addOnSuccessListener(executor, text -> {
                         try {
-                            List<DigitHit> hits = collectDigitHits(text);
+                            List<DigitHit> hits = filterCellSizedHits(
+                                    collectDigitHits(text),
+                                    ocrInput.getWidth(),
+                                    ocrInput.getHeight());
                             String board = useFullFrameMapping
                                     ? boardFromHitsFullFrame(
                                             hits, ocrInput.getWidth(), ocrInput.getHeight())
@@ -132,8 +135,9 @@ public final class SudokuBoardRecognizer {
     @VisibleForTesting
     @NonNull
     static String boardFromHitsFullFrame(@NonNull List<DigitHit> hits, int width, int height) {
-        float insetX = width / (Board.DIM * 20f);
-        float insetY = height / (Board.DIM * 20f);
+        // Larger inset discards border glyphs that slipped into a slightly oversized warp.
+        float insetX = width / (Board.DIM * 12f);
+        float insetY = height / (Board.DIM * 12f);
         return mapHitsToBoard(hits, insetX, insetY, width - insetX, height - insetY);
     }
 
@@ -149,11 +153,12 @@ public final class SudokuBoardRecognizer {
             return new String(empty);
         }
 
+        List<DigitHit> clustered = discardSpatialOutliers(hits);
         float minX = Float.MAX_VALUE;
         float maxX = -Float.MAX_VALUE;
         float minY = Float.MAX_VALUE;
         float maxY = -Float.MAX_VALUE;
-        for (DigitHit hit : hits) {
+        for (DigitHit hit : clustered) {
             minX = Math.min(minX, hit.centerX);
             maxX = Math.max(maxX, hit.centerX);
             minY = Math.min(minY, hit.centerY);
@@ -164,7 +169,66 @@ public final class SudokuBoardRecognizer {
         float height = Math.max(maxY - minY, 1f);
         float padX = width / (Board.DIM * 2f);
         float padY = height / (Board.DIM * 2f);
-        return mapHitsToBoard(hits, minX - padX, minY - padY, maxX + padX, maxY + padY);
+        return mapHitsToBoard(clustered, minX - padX, minY - padY, maxX + padX, maxY + padY);
+    }
+
+    /**
+     * Keep glyphs whose box is roughly a Sudoku cell digit; drop titles, page numbers, and noise.
+     */
+    @VisibleForTesting
+    @NonNull
+    static List<DigitHit> filterCellSizedHits(
+            @NonNull List<DigitHit> hits, int imageWidth, int imageHeight) {
+        if (hits.isEmpty() || imageWidth <= 0 || imageHeight <= 0) {
+            return hits;
+        }
+        float cell = Math.min(imageWidth, imageHeight) / (float) Board.DIM;
+        float minArea = (cell * 0.10f) * (cell * 0.10f);
+        float maxArea = (cell * 1.20f) * (cell * 1.20f);
+        List<DigitHit> filtered = new ArrayList<>(hits.size());
+        for (DigitHit hit : hits) {
+            if (hit.area >= minArea && hit.area <= maxArea) {
+                filtered.add(hit);
+            }
+        }
+        return filtered.isEmpty() ? hits : filtered;
+    }
+
+    /**
+     * Drop digits far from the main cluster (margin numbers outside the puzzle).
+     */
+    @VisibleForTesting
+    @NonNull
+    static List<DigitHit> discardSpatialOutliers(@NonNull List<DigitHit> hits) {
+        if (hits.size() < 6) {
+            return hits;
+        }
+        float cx = 0f;
+        float cy = 0f;
+        for (DigitHit hit : hits) {
+            cx += hit.centerX;
+            cy += hit.centerY;
+        }
+        cx /= hits.size();
+        cy /= hits.size();
+
+        float[] distSq = new float[hits.size()];
+        for (int i = 0; i < hits.size(); i++) {
+            float dx = hits.get(i).centerX - cx;
+            float dy = hits.get(i).centerY - cy;
+            distSq[i] = dx * dx + dy * dy;
+        }
+        float[] sorted = distSq.clone();
+        Arrays.sort(sorted);
+        float cutoff = sorted[(int) (sorted.length * 0.85f)] * 2.25f;
+
+        List<DigitHit> kept = new ArrayList<>(hits.size());
+        for (int i = 0; i < hits.size(); i++) {
+            if (distSq[i] <= cutoff) {
+                kept.add(hits.get(i));
+            }
+        }
+        return kept.size() >= 4 ? kept : hits;
     }
 
     @NonNull

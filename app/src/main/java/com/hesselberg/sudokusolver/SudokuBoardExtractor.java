@@ -155,6 +155,8 @@ public final class SudokuBoardExtractor {
 
     /**
      * Prefer a centered, square board. Pure area ranking fails when the page has several grids.
+     * Near-full-frame quads (page/photo borders) and edge-hugging corners are heavily downranked
+     * so margin content left in the framing crop does not become the “board”.
      */
     @VisibleForTesting
     static double scoreBoardCandidate(
@@ -165,8 +167,17 @@ public final class SudokuBoardExtractor {
             double squareQuality) {
         double imageArea = imageWidth * (double) imageHeight;
         double areaRatio = area / imageArea;
-        // Huge near-full-frame quads are often page borders, not the intended puzzle.
-        double areaWeight = areaRatio > 0.82 ? areaRatio * 0.45 : areaRatio;
+        // Sweet spot: board fills most of the frame but is not the outer page/photo border.
+        double areaWeight;
+        if (areaRatio > 0.88) {
+            areaWeight = areaRatio * 0.18;
+        } else if (areaRatio > 0.75) {
+            areaWeight = areaRatio * 0.40;
+        } else if (areaRatio < 0.12) {
+            areaWeight = areaRatio * 0.70;
+        } else {
+            areaWeight = areaRatio;
+        }
 
         double cx = 0;
         double cy = 0;
@@ -181,7 +192,43 @@ public final class SudokuBoardExtractor {
         double maxDist = Math.hypot(imageWidth / 2.0, imageHeight / 2.0);
         double centerScore = 1.0 - Math.min(1.0, Math.hypot(dx, dy) / maxDist);
 
-        return areaWeight * (0.35 + 0.65 * squareQuality) * (0.40 + 0.60 * centerScore) * imageArea;
+        double borderPenalty = borderTouchPenalty(orderedQuad, imageWidth, imageHeight);
+
+        return areaWeight
+                * (0.35 + 0.65 * squareQuality)
+                * (0.40 + 0.60 * centerScore)
+                * borderPenalty
+                * imageArea;
+    }
+
+    /**
+     * Quads with several corners on the image edge are usually the photo/page border.
+     *
+     * @return 1 for a free-floating board, down toward ~0.25 when most corners hug the border
+     */
+    @VisibleForTesting
+    static double borderTouchPenalty(
+            @NonNull Point[] orderedQuad, int imageWidth, int imageHeight) {
+        double margin = Math.max(4.0, Math.min(imageWidth, imageHeight) * 0.02);
+        int touches = 0;
+        for (Point point : orderedQuad) {
+            if (point.x <= margin
+                    || point.y <= margin
+                    || point.x >= imageWidth - margin
+                    || point.y >= imageHeight - margin) {
+                touches++;
+            }
+        }
+        if (touches >= 3) {
+            return 0.25;
+        }
+        if (touches == 2) {
+            return 0.55;
+        }
+        if (touches == 1) {
+            return 0.85;
+        }
+        return 1.0;
     }
 
     @VisibleForTesting
