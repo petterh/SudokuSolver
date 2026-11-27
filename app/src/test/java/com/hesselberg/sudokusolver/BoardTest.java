@@ -143,4 +143,21 @@ public class BoardTest {
         assertEquals(SampleBoards.SUDOKU_SAMPLE, new Board(SampleBoards.SUDOKU_SAMPLE).toString());
         assertEquals(SOLUTION, new Board(SOLUTION).toString());
     }
+
+    @Test
+    public void conflictingCells_marksDuplicateDigitsInSameRow() {
+        // Two 1s in row 0 (indices 7 and 8).
+        boolean[] conflicts = new Board(ERROR2).conflictingCells();
+        assertTrue(conflicts[7]);
+        assertTrue(conflicts[8]);
+        assertFalse(conflicts[0]);
+    }
+
+    @Test
+    public void conflictingCells_emptyForConsistentBoard() {
+        boolean[] conflicts = new Board(SampleBoards.SUDOKU_SAMPLE).conflictingCells();
+        for (boolean conflict : conflicts) {
+            assertFalse(conflict);
+        }
+    }
 }

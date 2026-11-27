@@ -3,6 +3,7 @@ package com.hesselberg.sudokusolver;
 import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Matrix;
@@ -104,6 +105,7 @@ public class MainActivity extends AppCompatActivity {
             final int stringIndex = Board.convertToStringIndex(count++);
             textView.setOnClickListener(v -> editCell(stringIndex));
         }
+        showBoard(currentBoard);
     }
 
     @Override
@@ -338,10 +340,8 @@ public class MainActivity extends AppCompatActivity {
     private void setCellValue(int stringIndex, char value) {
         currentBoard = withCellValue(currentBoard, stringIndex, value);
         clueCells[stringIndex] = value != ' ';
-
-        List<TextView> textViews = getTextViews();
-        int textViewIndex = Board.convertToTextViewIndex(stringIndex);
-        applyCellVisual(textViews.get(textViewIndex), value, clueCells[stringIndex]);
+        // Refresh all cells: fixing one conflict can clear others in the same unit.
+        showBoard(currentBoard);
     }
 
     @VisibleForTesting
@@ -418,20 +418,34 @@ public class MainActivity extends AppCompatActivity {
 
     private void showBoard(@NonNull String board) {
         List<TextView> textViews = getTextViews();
+        boolean[] conflicts = new Board(board).conflictingCells();
         for (int i = 0; i < Board.DIM * Board.DIM; i++) {
             int textViewIndex = Board.convertToTextViewIndex(i);
-            applyCellVisual(textViews.get(textViewIndex), board.charAt(i), clueCells[i]);
+            applyCellVisual(
+                    textViews.get(textViewIndex),
+                    board.charAt(i),
+                    clueCells[i],
+                    conflicts[i]);
         }
     }
 
-    private void applyCellVisual(@NonNull TextView textView, char value, boolean clue) {
+    private void applyCellVisual(
+            @NonNull TextView textView, char value, boolean clue, boolean conflict) {
         char[] ch = new char[]{value};
         textView.setText(ch, 0, 1);
+        // setTypeface can reset text color on some devices; apply color afterward.
         if (clue && value != ' ') {
-            textView.setTypeface(null, Typeface.BOLD);
-            textView.setTextColor(0xff000000);
+            textView.setTypeface(Typeface.DEFAULT_BOLD);
         } else {
-            textView.setTypeface(null, Typeface.NORMAL);
+            textView.setTypeface(Typeface.DEFAULT);
         }
+
+        boolean showConflict = conflict && value != ' ';
+        int colorRes = showConflict
+                ? R.color.cell_conflict
+                : (clue && value != ' ' ? R.color.cell_clue : R.color.cell_filled);
+        textView.setTextColor(ColorStateList.valueOf(ContextCompat.getColor(this, colorRes)));
+        textView.setBackgroundResource(
+                showConflict ? R.drawable.digit_border_conflict : R.drawable.digit_border);
     }
 }
