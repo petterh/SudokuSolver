@@ -29,15 +29,15 @@ import java.util.concurrent.Executors;
 public class MainActivity extends AppCompatActivity {
 
     private static final String TEST_BOARD =
-            "       1 " +
-            "8        " +
-            "    67  2" +
-            " 6  82  3" +
-            "9  4 5   " +
-            "     3 81" +
-            "3  5     " +
-            "  5   1 6" +
-            "4  2  73 ";
+            "     3 18" +
+            "6     425" +
+            "   5     " +
+            "  2 3   4" +
+            " 91  8 6 " +
+            "         " +
+            "     463 " +
+            "95   2   " +
+            "2       1";
 
     private ActivityMainBinding binding;
     private final ExecutorService backgroundExecutor = Executors.newSingleThreadExecutor();
